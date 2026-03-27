@@ -176,7 +176,8 @@ export default function App() {
   const fetchPhotos = useCallback(async (pieceId) => {
     try {
       console.log('📸 fetchPhotos for piece:', pieceId);
-      const data = await api(`photos?piece_id=${pieceId}`);
+      const cacheBuster = Date.now();
+      const data = await api(`photos?piece_id=${pieceId}&_t=${cacheBuster}`);
       console.log('📸 Photos fetched:', data.length, 'photos');
       console.log('📸 Photos data:', data);
       setPhotos(data);
