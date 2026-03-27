@@ -203,11 +203,30 @@ export async function GET(request) {
       if (!edl.paid) return NextResponse.json({ error: 'Rapport non payé' }, { status: 403, headers: corsHeaders() });
       const pieces = await db.collection('pieces').find({ edl_id: edl.id }).toArray();
       const completedPieces = pieces.filter(p => p.statut === 'completed');
-      // Fetch photos for each piece
+      
+      // Fetch photos for each piece and convert Cloudinary URLs to base64
       for (const piece of completedPieces) {
         const photos = await db.collection('photos').find({ piece_id: piece.id }).toArray();
+        
+        // Convert Cloudinary URLs to base64 for PDF generation
+        for (const photo of photos) {
+          if (photo.url && photo.url.startsWith('http')) {
+            try {
+              const response = await fetch(photo.url);
+              const arrayBuffer = await response.arrayBuffer();
+              const base64 = Buffer.from(arrayBuffer).toString('base64');
+              photo.data = `data:image/jpeg;base64,${base64}`;
+              // Remove URL to save bandwidth
+              delete photo.url;
+            } catch (err) {
+              console.error('Error converting Cloudinary URL to base64:', err);
+            }
+          }
+        }
+        
         piece.photos = photos;
       }
+      
       return NextResponse.json({
         edl: { ...edl, download_token: undefined },
         pieces: completedPieces,

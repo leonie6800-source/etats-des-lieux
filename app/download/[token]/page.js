@@ -140,23 +140,8 @@ export default function DownloadPage({ params }) {
           for (const photo of photos) {
             checkSpace(60);
             try {
-              let imageData = photo.url || photo.data;
-              
-              // Convert Cloudinary URL to base64 for PDF
-              if (imageData && imageData.startsWith('http')) {
-                try {
-                  const response = await fetch(imageData);
-                  const blob = await response.blob();
-                  imageData = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(blob);
-                  });
-                } catch (err) {
-                  console.error('Error loading image from Cloudinary:', err);
-                  imageData = null;
-                }
-              }
+              // Photo data is now pre-converted to base64 by the API
+              const imageData = photo.data;
               
               if (imageData && imageData.startsWith('data:')) {
                 doc.setDrawColor(200);
