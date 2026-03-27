@@ -108,6 +108,51 @@ export default function App() {
     }
   }, []);
 
+  // Handle Stripe payment return
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentSuccess = params.get('payment_success');
+    const sessionId = params.get('session_id');
+    const edlId = params.get('edl_id');
+    const paymentCancel = params.get('payment_cancel');
+
+    if (paymentCancel) {
+      showNotif('Paiement annulé', 'error');
+      window.history.replaceState({}, '', '/');
+      return;
+    }
+
+    if (paymentSuccess && sessionId && edlId) {
+      // Poll Stripe for payment status
+      const pollPayment = async () => {
+        try {
+          const result = await api('stripe/status', {
+            method: 'POST',
+            body: JSON.stringify({ session_id: sessionId }),
+          });
+
+          if (result.payment_status === 'paid') {
+            showNotif('Paiement réussi ! Votre rapport est débloqué 🎉');
+            // Navigate to report view
+            const edl = await api(`edl/${edlId}`);
+            if (edl) {
+              setCurrentEdl(edl);
+              const piecesData = await api(`pieces?edl_id=${edlId}`);
+              setPieces(piecesData);
+              setView('report');
+            }
+          } else {
+            showNotif('Vérification du paiement en cours...', 'error');
+          }
+        } catch (e) {
+          console.error('Payment poll error:', e);
+        }
+        window.history.replaceState({}, '', '/');
+      };
+      pollPayment();
+    }
+  }, []);
+
   const showNotif = useCallback((msg, type = 'success') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
@@ -990,16 +1035,26 @@ function ReportView({ edl, pieces, showNotif }) {
   const handlePayment = async () => {
     setPaying(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const result = await api('payment', {
+      const origin = window.location.origin;
+      const result = await api('stripe/checkout', {
         method: 'POST',
-        body: JSON.stringify({ edl_id: edl.id, plan: selectedPlan, addons }),
+        body: JSON.stringify({
+          plan_code: selectedPlan,
+          addons,
+          edl_id: edl.id,
+          origin_url: origin,
+        }),
       });
-      setPaid(true);
-      if (result.download_token) setDownloadToken(result.download_token);
-      showNotif(`Paiement de ${totalPrice.toFixed(2)}€ réussi ! (MOCK — Stripe bientôt)`);
-    } catch (e) { showNotif(e.message, 'error'); }
-    setPaying(false);
+      // Redirect to Stripe Checkout
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        throw new Error('Pas de lien de paiement reçu');
+      }
+    } catch (e) {
+      showNotif('Erreur paiement: ' + e.message, 'error');
+      setPaying(false);
+    }
   };
 
   const generatePDF = async () => {
@@ -1451,9 +1506,9 @@ function ReportView({ edl, pieces, showNotif }) {
           </div>
           <button onClick={handlePayment} disabled={paying}
             className="w-full bg-white text-[#1e3a5f] font-bold py-3.5 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all text-sm">
-            {paying ? '⏳ Traitement du paiement...' : `💳 Payer ${totalPrice.toFixed(2)}€`}
+            {paying ? '⏳ Redirection vers Stripe...' : `💳 Payer ${totalPrice.toFixed(2)}€`}
           </button>
-          <p className="text-[10px] text-white/50 text-center mt-2">Paiement sécurisé • MOCK (Stripe bientôt)</p>
+          <p className="text-[10px] text-white/50 text-center mt-2">Paiement sécurisé par Stripe</p>
         </div>
       )}
 

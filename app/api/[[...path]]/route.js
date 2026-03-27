@@ -2,8 +2,22 @@ import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import OpenAI, { toFile } from 'openai';
+import Stripe from 'stripe';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Fixed pricing (backend only - NEVER from frontend)
+const PLANS = {
+  one_shot: { name: 'État des Lieux — À l\'acte', price: 9.90, mode: 'payment' },
+  pack_pro: { name: 'État des Lieux — Pack Pro', price: 49.00, mode: 'subscription' },
+  business: { name: 'État des Lieux — Business', price: 149.00, mode: 'subscription' },
+};
+const ADDONS = {
+  comparaison_ia: { name: 'Comparaison IA', price: 2.00 },
+  archive_one_time: { name: 'Archive Sécurisée 10 ans', price: 10.00 },
+  archive_monthly: { name: 'Archive Sécurisée 10 ans (mensuel)', price: 1.00, recurring: true },
+};
 
 const client = new MongoClient(process.env.MONGO_URL);
 const dbName = process.env.DB_NAME || 'edl_pro';
@@ -548,6 +562,184 @@ export async function POST(request) {
       } catch (transcribeError) {
         console.error('Transcribe Error:', transcribeError);
         return NextResponse.json({ error: 'Erreur transcription: ' + transcribeError.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
+    // ==================== STRIPE CHECKOUT ====================
+
+    // POST /api/stripe/checkout - Create Stripe Checkout Session
+    if (segments[0] === 'stripe' && segments[1] === 'checkout') {
+      const { plan_code, addons: selectedAddons, edl_id, origin_url } = body;
+      
+      if (!edl_id || !origin_url) {
+        return NextResponse.json({ error: 'edl_id and origin_url required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      const planDef = PLANS[plan_code] || PLANS.one_shot;
+      const lineItems = [];
+
+      // Main plan
+      const priceData = {
+        currency: 'eur',
+        product_data: { name: planDef.name },
+        unit_amount: Math.round(planDef.price * 100), // cents
+      };
+      if (planDef.mode === 'subscription') {
+        priceData.recurring = { interval: 'month' };
+      }
+      lineItems.push({ price_data: priceData, quantity: 1 });
+
+      // Add-ons (one-time, added as extra line items)
+      let hasComparaisonIA = false;
+      let hasArchive = false;
+      if (selectedAddons?.comparaison_ia) {
+        hasComparaisonIA = true;
+        lineItems.push({
+          price_data: {
+            currency: 'eur',
+            product_data: { name: ADDONS.comparaison_ia.name },
+            unit_amount: Math.round(ADDONS.comparaison_ia.price * 100),
+            ...(planDef.mode === 'subscription' ? { recurring: { interval: 'month' } } : {}),
+          },
+          quantity: 1,
+        });
+      }
+      if (selectedAddons?.archive_securisee) {
+        hasArchive = true;
+        const archiveAddon = selectedAddons.archive_type === 'monthly' ? ADDONS.archive_monthly : ADDONS.archive_one_time;
+        lineItems.push({
+          price_data: {
+            currency: 'eur',
+            product_data: { name: archiveAddon.name },
+            unit_amount: Math.round(archiveAddon.price * 100),
+            ...(archiveAddon.recurring || planDef.mode === 'subscription' ? { recurring: { interval: 'month' } } : {}),
+          },
+          quantity: 1,
+        });
+      }
+
+      const successUrl = `${origin_url}/?payment_success=true&session_id={CHECKOUT_SESSION_ID}&edl_id=${edl_id}`;
+      const cancelUrl = `${origin_url}/?payment_cancel=true&edl_id=${edl_id}`;
+
+      try {
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: lineItems,
+          mode: planDef.mode === 'subscription' ? 'subscription' : 'payment',
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          metadata: {
+            edl_id,
+            plan_code: plan_code || 'one_shot',
+            has_comparaison_ia: String(hasComparaisonIA),
+            has_archive: String(hasArchive),
+          },
+        });
+
+        // Create payment transaction record
+        const transaction = {
+          id: uuidv4(),
+          session_id: session.id,
+          edl_id,
+          plan_code: plan_code || 'one_shot',
+          plan_name: planDef.name,
+          addons: selectedAddons || {},
+          amount: lineItems.reduce((sum, item) => sum + (item.price_data.unit_amount * item.quantity), 0) / 100,
+          currency: 'eur',
+          payment_status: 'pending',
+          status: 'initiated',
+          created_at: new Date().toISOString(),
+        };
+        await db.collection('payment_transactions').insertOne(transaction);
+
+        return NextResponse.json({
+          url: session.url,
+          session_id: session.id,
+        }, { headers: corsHeaders() });
+
+      } catch (stripeErr) {
+        console.error('Stripe Checkout Error:', stripeErr);
+        return NextResponse.json({ error: 'Erreur Stripe: ' + stripeErr.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
+    // POST /api/stripe/status - Check payment status & finalize
+    if (segments[0] === 'stripe' && segments[1] === 'status') {
+      const { session_id } = body;
+      if (!session_id) {
+        return NextResponse.json({ error: 'session_id required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      try {
+        const session = await stripe.checkout.sessions.retrieve(session_id);
+        const transaction = await db.collection('payment_transactions').findOne({ session_id });
+
+        // Only process if not already processed (idempotent)
+        if (session.payment_status === 'paid' && transaction && transaction.payment_status !== 'paid') {
+          const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
+          const metadata = session.metadata || {};
+
+          // Update transaction
+          await db.collection('payment_transactions').updateOne(
+            { session_id },
+            { $set: { payment_status: 'paid', status: 'completed', stripe_payment_id: session.payment_intent || session.subscription, completed_at: new Date().toISOString() } }
+          );
+
+          // Update EDL
+          await db.collection('edl').updateOne(
+            { id: metadata.edl_id },
+            { $set: {
+              paid: true,
+              statut: 'completed',
+              stripe_payment_id: session.payment_intent || session.subscription,
+              plan: metadata.plan_code,
+              has_comparaison_ia: metadata.has_comparaison_ia === 'true',
+              has_archive: metadata.has_archive === 'true',
+              download_token: downloadToken,
+            } }
+          );
+
+          // Create invoice
+          const invoice = {
+            id: uuidv4(),
+            edl_id: metadata.edl_id,
+            payment_id: session.payment_intent || session.subscription,
+            session_id,
+            plan: PLANS[metadata.plan_code]?.name || 'À l\'acte',
+            plan_code: metadata.plan_code,
+            total: (session.amount_total || 0) / 100,
+            currency: session.currency,
+            status: 'paid',
+            created_at: new Date().toISOString(),
+          };
+          await db.collection('invoices').insertOne(invoice);
+
+          return NextResponse.json({
+            status: session.status,
+            payment_status: session.payment_status,
+            amount_total: (session.amount_total || 0) / 100,
+            currency: session.currency,
+            download_token: downloadToken,
+            edl_id: metadata.edl_id,
+          }, { headers: corsHeaders() });
+        }
+
+        // Already processed or not paid
+        const edl = transaction ? await db.collection('edl').findOne({ id: transaction.edl_id }) : null;
+
+        return NextResponse.json({
+          status: session.status,
+          payment_status: session.payment_status,
+          amount_total: (session.amount_total || 0) / 100,
+          currency: session.currency,
+          download_token: edl?.download_token || null,
+          edl_id: transaction?.edl_id || session.metadata?.edl_id,
+          already_processed: transaction?.payment_status === 'paid',
+        }, { headers: corsHeaders() });
+
+      } catch (stripeErr) {
+        console.error('Stripe Status Error:', stripeErr);
+        return NextResponse.json({ error: 'Erreur vérification: ' + stripeErr.message }, { status: 500, headers: corsHeaders() });
       }
     }
 
