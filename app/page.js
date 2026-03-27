@@ -250,7 +250,12 @@ export default function App() {
 
   // ---- Photo handling ----
   const uploadPhoto = async (base64Data, legende = '', gpsData = null) => {
-    console.log('📸 uploadPhoto called', { currentPiece, currentEdl, base64Length: base64Data?.length });
+    console.log('📸 uploadPhoto called', { 
+      currentPiece: currentPiece?.id, 
+      currentPieceName: currentPiece?.nom,
+      currentEdl: currentEdl?.id, 
+      base64Length: base64Data?.length 
+    });
     if (!currentPiece || !currentEdl) {
       console.error('❌ uploadPhoto: Missing currentPiece or currentEdl', { currentPiece, currentEdl });
       showNotif('Erreur: pièce ou EDL non défini', 'error');
@@ -259,7 +264,7 @@ export default function App() {
     try {
       // Get GPS if not provided
       const gps = gpsData || await getGPS();
-      console.log('📸 Sending POST to /api/photos');
+      console.log('📸 Sending POST to /api/photos with piece_id:', currentPiece.id);
       
       await api('photos', {
         method: 'POST',
@@ -272,7 +277,7 @@ export default function App() {
           gps,
         }),
       });
-      console.log('📸 Upload successful, fetching photos');
+      console.log('📸 Upload successful, fetching photos for piece:', currentPiece.id);
       await fetchPhotos(currentPiece.id);
       showNotif('Photo ajoutée !');
     } catch (e) { 
