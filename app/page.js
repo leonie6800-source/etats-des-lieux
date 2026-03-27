@@ -639,14 +639,14 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
     });
   }, []);
 
-  const handleFileSelect = useCallback(async (e) => {
+  const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || []);
     for (const file of files) {
       const base64 = await processImage(file);
       await uploadPhoto(base64);
     }
     e.target.value = '';
-  }, [processImage, uploadPhoto]);
+  };
 
   const stepNames = ['Général', 'Murs & Plafond', 'Sol', 'Équipements', 'Photos'];
 
