@@ -142,8 +142,10 @@ export default function DownloadPage({ params }) {
             try {
               // Photo data is now pre-converted to base64 by the API
               const imageData = photo.data;
+              console.log('📸 Processing photo:', { hasData: !!imageData, startsWithData: imageData?.startsWith('data:') });
               
               if (imageData && imageData.startsWith('data:')) {
+                console.log('✅ Adding image to PDF');
                 doc.setDrawColor(200);
                 doc.rect(margin, y, contentWidth, 52, 'S');
                 doc.addImage(imageData, 'JPEG', margin + 2, y + 2, 48, 38);
