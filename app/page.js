@@ -1,0 +1,1186 @@
+'use client';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+
+// ==================== CONSTANTS ====================
+const HOUSING_TYPES = ['Studio', 'T1', 'T2', 'T3', 'T4', 'Maison'];
+const EDL_TYPES = ['Entrée', 'Sortie'];
+const CONDITIONS = ['Très bon', 'Bon', 'Correct', 'Usé', 'Dégradé'];
+const WALL_MATERIALS = ['Peinture', 'Papier peint', 'Carrelage', 'Béton', 'Autre'];
+const FLOOR_MATERIALS = ['Carrelage', 'Parquet', 'Lino', 'Moquette', 'Béton', 'Autre'];
+const CEILING_MATERIALS = ['Peinture', 'Plâtre', 'Lambris', 'Béton', 'Autre'];
+
+const ROOM_ICONS = {
+  'Entrée': '🚪', 'Salon': '🛋️', 'Cuisine': '🍳', 'Chambre 1': '🛏️',
+  'Chambre 2': '🛏️', 'Chambre 3': '🛏️', 'Salle de bain': '🚿', 'WC': '🚽',
+  'Couloir': '🏠', 'Balcon': '🌿', 'Cave': '📦', 'Garage': '🚗',
+};
+
+const EQUIPMENT_CONDITIONS = ['Bon état', 'Correct', 'Usé', 'Dégradé', 'Absent'];
+
+// ==================== API HELPERS ====================
+async function api(path, options = {}) {
+  const res = await fetch(`/api/${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erreur API');
+  }
+  return res.json();
+}
+
+// ==================== UTILITY ====================
+function conditionColor(condition) {
+  switch (condition) {
+    case 'Très bon': return 'bg-emerald-100 text-emerald-700 border-emerald-300';
+    case 'Bon': return 'bg-green-100 text-green-700 border-green-300';
+    case 'Correct': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+    case 'Usé': return 'bg-orange-100 text-orange-700 border-orange-300';
+    case 'Dégradé': return 'bg-red-100 text-red-700 border-red-300';
+    default: return 'bg-gray-100 text-gray-600 border-gray-300';
+  }
+}
+
+function statusBadge(statut) {
+  switch (statut) {
+    case 'completed': return { bg: 'bg-[#e6f7ef] border-[#27a96c]', text: 'text-[#27a96c]', label: '✓ Terminé' };
+    case 'in_progress': return { bg: 'bg-[#e8f0fb] border-[#2d6ac4]', text: 'text-[#2d6ac4]', label: '● En cours' };
+    default: return { bg: 'bg-gray-100 border-gray-300', text: 'text-gray-500', label: '○ À inspecter' };
+  }
+}
+
+// ==================== MAIN APP ====================
+export default function App() {
+  const [view, setView] = useState('dashboard');
+  const [edls, setEdls] = useState([]);
+  const [currentEdl, setCurrentEdl] = useState(null);
+  const [pieces, setPieces] = useState([]);
+  const [currentPiece, setCurrentPiece] = useState(null);
+  const [photos, setPhotos] = useState([]);
+  const [inspectionStep, setInspectionStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({});
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [notification, setNotification] = useState(null);
+
+  // Form state for new EDL
+  const [newEdl, setNewEdl] = useState({
+    adresse: '', type_logement: 'T2', type_edl: 'Entrée',
+    nom_locataire: '', nom_proprietaire: '',
+  });
+
+  // Register service worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
+  const showNotif = useCallback((msg, type = 'success') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  // ---- Data fetching ----
+  const fetchEdls = useCallback(async () => {
+    try {
+      const data = await api('edl');
+      setEdls(data);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchPieces = useCallback(async (edlId) => {
+    try {
+      const data = await api(`pieces?edl_id=${edlId}`);
+      setPieces(data);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchPhotos = useCallback(async (pieceId) => {
+    try {
+      const data = await api(`photos?piece_id=${pieceId}`);
+      setPhotos(data);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  useEffect(() => { fetchEdls(); }, [fetchEdls]);
+
+  // ---- Navigation ----
+  const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(); };
+  const goToRooms = async (edl) => {
+    setCurrentEdl(edl);
+    await fetchPieces(edl.id);
+    setView('rooms');
+  };
+  const goToInspection = async (piece) => {
+    setCurrentPiece(piece);
+    setFormData(piece.donnees_json || {});
+    await fetchPhotos(piece.id);
+    setInspectionStep(1);
+    setView('inspection');
+  };
+  const goToReport = async (edl) => {
+    setCurrentEdl(edl);
+    await fetchPieces(edl.id);
+    setView('report');
+  };
+
+  // ---- Create EDL ----
+  const createEdl = async () => {
+    if (!newEdl.adresse || !newEdl.nom_locataire || !newEdl.nom_proprietaire) {
+      showNotif('Veuillez remplir tous les champs', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const edl = await api('edl', { method: 'POST', body: JSON.stringify(newEdl) });
+      showNotif('État des lieux créé !');
+      setNewEdl({ adresse: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '' });
+      setShowCreateForm(false);
+      await goToRooms(edl);
+    } catch (e) { showNotif(e.message, 'error'); }
+    setLoading(false);
+  };
+
+  // ---- Save inspection data ----
+  const saveInspection = async (data, nextStep) => {
+    if (!currentPiece) return;
+    const merged = { ...formData, ...data };
+    setFormData(merged);
+    try {
+      const newStatut = nextStep > 5 ? 'completed' : 'in_progress';
+      await api(`pieces/${currentPiece.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ donnees_json: merged, statut: newStatut, observations_generales: merged.observations_generales || '' }),
+      });
+      if (nextStep > 5) {
+        showNotif('Pièce terminée !');
+        // Refresh and go back to rooms
+        if (currentEdl) {
+          await fetchPieces(currentEdl.id);
+        }
+        setView('rooms');
+      } else {
+        setInspectionStep(nextStep);
+      }
+    } catch (e) { showNotif(e.message, 'error'); }
+  };
+
+  // ---- Photo handling ----
+  const uploadPhoto = async (base64Data, legende = '') => {
+    if (!currentPiece || !currentEdl) return;
+    try {
+      await api('photos', {
+        method: 'POST',
+        body: JSON.stringify({
+          piece_id: currentPiece.id,
+          edl_id: currentEdl.id,
+          data: base64Data,
+          legende,
+          horodatage: new Date().toISOString(),
+        }),
+      });
+      await fetchPhotos(currentPiece.id);
+      showNotif('Photo ajoutée !');
+    } catch (e) { showNotif(e.message, 'error'); }
+  };
+
+  const deletePhoto = async (photoId) => {
+    try {
+      await api(`photos/${photoId}`, { method: 'DELETE' });
+      await fetchPhotos(currentPiece.id);
+      showNotif('Photo supprimée');
+    } catch (e) { showNotif(e.message, 'error'); }
+  };
+
+  // ---- Add custom room ----
+  const addCustomRoom = async (name) => {
+    if (!currentEdl) return;
+    try {
+      const piece = await api('pieces', {
+        method: 'POST',
+        body: JSON.stringify({ edl_id: currentEdl.id, nom: name, icon: '📋' }),
+      });
+      await fetchPieces(currentEdl.id);
+      showNotif(`${name} ajoutée !`);
+    } catch (e) { showNotif(e.message, 'error'); }
+  };
+
+  // ---- Delete EDL ----
+  const deleteEdl = async (edlId) => {
+    if (!confirm('Supprimer cet état des lieux ?')) return;
+    try {
+      await api(`edl/${edlId}`, { method: 'DELETE' });
+      showNotif('Supprimé');
+      fetchEdls();
+    } catch (e) { showNotif(e.message, 'error'); }
+  };
+
+  // ==================== RENDER ====================
+  return (
+    <div className="min-h-screen bg-[#f4f6f9]">
+      {/* Notification */}
+      {notification && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all ${notification.type === 'error' ? 'bg-red-500' : 'bg-[#27a96c]'}`}>
+          {notification.msg}
+        </div>
+      )}
+
+      <div className="max-w-[480px] mx-auto min-h-screen">
+        {/* HEADER */}
+        <header className="bg-[#1e3a5f] text-white px-5 py-4 sticky top-0 z-40 shadow-md">
+          <div className="flex items-center justify-between">
+            {view !== 'dashboard' && (
+              <button onClick={() => {
+                if (view === 'inspection') { setView('rooms'); fetchPieces(currentEdl?.id); }
+                else if (view === 'rooms' || view === 'report') goToDashboard();
+                else goToDashboard();
+              }} className="text-white/80 hover:text-white mr-3 text-lg">
+                ←
+              </button>
+            )}
+            <div className="flex-1">
+              <h1 className="text-lg font-bold tracking-tight">🏠 État des Lieux Pro</h1>
+              {view === 'rooms' && currentEdl && (
+                <p className="text-xs text-white/70 mt-0.5 truncate">{currentEdl.adresse}</p>
+              )}
+              {view === 'inspection' && currentPiece && (
+                <p className="text-xs text-white/70 mt-0.5">{currentPiece.icon} {currentPiece.nom} — Étape {inspectionStep}/5</p>
+              )}
+            </div>
+            {view === 'dashboard' && (
+              <button onClick={() => setShowCreateForm(true)}
+                className="bg-[#2d6ac4] hover:bg-[#2560b5] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all">
+                + Nouveau
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* VIEWS */}
+        <main className="px-4 py-5 pb-24">
+          {view === 'dashboard' && (
+            <DashboardView
+              edls={edls} showCreate={showCreateForm} setShowCreate={setShowCreateForm}
+              newEdl={newEdl} setNewEdl={setNewEdl} createEdl={createEdl}
+              goToRooms={goToRooms} goToReport={goToReport} deleteEdl={deleteEdl} loading={loading}
+            />
+          )}
+          {view === 'rooms' && (
+            <RoomsView
+              edl={currentEdl} pieces={pieces} goToInspection={goToInspection}
+              goToReport={goToReport} addCustomRoom={addCustomRoom}
+            />
+          )}
+          {view === 'inspection' && (
+            <InspectionView
+              piece={currentPiece} step={inspectionStep} setStep={setInspectionStep}
+              formData={formData} saveInspection={saveInspection}
+              photos={photos} uploadPhoto={uploadPhoto} deletePhoto={deletePhoto}
+              edl={currentEdl}
+            />
+          )}
+          {view === 'report' && (
+            <ReportView edl={currentEdl} pieces={pieces} showNotif={showNotif} />
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ==================== DASHBOARD VIEW ====================
+function DashboardView({ edls, showCreate, setShowCreate, newEdl, setNewEdl, createEdl, goToRooms, goToReport, deleteEdl, loading }) {
+  return (
+    <div>
+      {/* Create Form Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCreate(false)}>
+          <div className="bg-white w-full max-w-[480px] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-[#1e3a5f]">Nouvel état des lieux</h2>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Adresse du logement *</label>
+              <input type="text" value={newEdl.adresse} onChange={e => setNewEdl({...newEdl, adresse: e.target.value})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] focus:border-transparent outline-none"
+                placeholder="12 rue de la Paix, 75001 Paris" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Type de logement</label>
+                <select value={newEdl.type_logement} onChange={e => setNewEdl({...newEdl, type_logement: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none bg-white">
+                  {HOUSING_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Type d'EDL</label>
+                <select value={newEdl.type_edl} onChange={e => setNewEdl({...newEdl, type_edl: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none bg-white">
+                  {EDL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Nom du locataire *</label>
+              <input type="text" value={newEdl.nom_locataire} onChange={e => setNewEdl({...newEdl, nom_locataire: e.target.value})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                placeholder="Jean Dupont" />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Nom du propriétaire *</label>
+              <input type="text" value={newEdl.nom_proprietaire} onChange={e => setNewEdl({...newEdl, nom_proprietaire: e.target.value})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                placeholder="Marie Martin" />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setShowCreate(false)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50">
+                Annuler
+              </button>
+              <button onClick={createEdl} disabled={loading}
+                className="flex-1 py-3 rounded-xl bg-[#1e3a5f] text-white font-semibold text-sm hover:bg-[#162d4a] disabled:opacity-50 transition-all">
+                {loading ? '...' : 'Créer l\'EDL'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {edls.length === 0 && !showCreate && (
+        <div className="text-center py-16">
+          <div className="text-6xl mb-4">🏠</div>
+          <h2 className="text-xl font-bold text-[#1e3a5f] mb-2">Bienvenue !</h2>
+          <p className="text-gray-500 text-sm mb-6">Créez votre premier état des lieux<br />en quelques minutes</p>
+          <button onClick={() => setShowCreate(true)}
+            className="bg-[#2d6ac4] text-white px-8 py-3 rounded-xl font-semibold text-sm hover:bg-[#2560b5] shadow-lg shadow-blue-200 transition-all">
+            + Créer un état des lieux
+          </button>
+        </div>
+      )}
+
+      {/* EDL List */}
+      {edls.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Mes états des lieux</h2>
+          {edls.map(edl => {
+            const progress = edl.pieces_total > 0 ? Math.round((edl.pieces_done / edl.pieces_total) * 100) : 0;
+            return (
+              <div key={edl.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-[#1e3a5f] text-sm truncate">{edl.adresse}</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {edl.type_logement} • {edl.type_edl} • {new Date(edl.created_at).toLocaleDateString('fr-FR')}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${edl.paid ? 'bg-[#e6f7ef] text-[#27a96c]' : 'bg-[#e8f0fb] text-[#2d6ac4]'}`}>
+                    {edl.paid ? '✓ Finalisé' : 'En cours'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                  <span>🏠 {edl.pieces_done}/{edl.pieces_total} pièces</span>
+                  <span>📷 {edl.photos_count || 0} photos</span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
+                  <div className="h-2 rounded-full bg-gradient-to-r from-[#2d6ac4] to-[#27a96c] transition-all duration-500"
+                    style={{ width: `${progress}%` }} />
+                </div>
+
+                <div className="flex gap-2">
+                  <button onClick={() => goToRooms(edl)}
+                    className="flex-1 bg-[#1e3a5f] text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-[#162d4a] transition-all">
+                    {progress === 100 ? '📋 Voir' : '▶ Continuer'}
+                  </button>
+                  {progress === 100 && (
+                    <button onClick={() => goToReport(edl)}
+                      className="flex-1 bg-[#27a96c] text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-[#1f9058] transition-all">
+                      📄 Rapport
+                    </button>
+                  )}
+                  <button onClick={() => deleteEdl(edl.id)}
+                    className="px-3 py-2.5 rounded-xl border border-red-200 text-red-400 hover:bg-red-50 text-sm transition-all">
+                    🗑
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== ROOMS VIEW ====================
+function RoomsView({ edl, pieces, goToInspection, goToReport, addCustomRoom }) {
+  const [showAddRoom, setShowAddRoom] = useState(false);
+  const [customName, setCustomName] = useState('');
+
+  const piecesCompleted = pieces.filter(p => p.statut === 'completed').length;
+  const progress = pieces.length > 0 ? Math.round((piecesCompleted / pieces.length) * 100) : 0;
+
+  return (
+    <div>
+      {/* Stats */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold text-[#1e3a5f]">Progression</h2>
+          <span className="text-2xl font-bold text-[#2d6ac4]">{progress}%</span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-3 mb-3">
+          <div className="h-3 rounded-full bg-gradient-to-r from-[#2d6ac4] to-[#27a96c] transition-all duration-500"
+            style={{ width: `${progress}%` }} />
+        </div>
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>🏠 {piecesCompleted}/{pieces.length} pièces</span>
+          <span>{edl?.type_edl === 'Entrée' ? "📥 Entrée" : "📤 Sortie"}</span>
+        </div>
+      </div>
+
+      {/* Room Grid */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        {pieces.map(piece => {
+          const status = statusBadge(piece.statut);
+          return (
+            <button key={piece.id} onClick={() => goToInspection(piece)}
+              className={`bg-white rounded-2xl p-4 shadow-sm border-2 ${piece.statut === 'completed' ? 'border-[#27a96c]' : piece.statut === 'in_progress' ? 'border-[#2d6ac4]' : 'border-gray-100'} hover:shadow-md transition-all text-left`}>
+              <div className="text-3xl mb-2">{piece.icon || ROOM_ICONS[piece.nom] || '📋'}</div>
+              <h3 className="font-semibold text-[#1e3a5f] text-sm mb-1">{piece.nom}</h3>
+              <div className={`text-xs font-medium ${status.text}`}>{status.label}</div>
+              {piece.photos_count > 0 && (
+                <div className="text-xs text-gray-400 mt-1">📷 {piece.photos_count}</div>
+              )}
+            </button>
+          );
+        })}
+
+        {/* Add room button */}
+        <button onClick={() => setShowAddRoom(true)}
+          className="bg-white rounded-2xl p-4 shadow-sm border-2 border-dashed border-gray-200 hover:border-[#2d6ac4] hover:shadow-md transition-all text-center flex flex-col items-center justify-center">
+          <div className="text-3xl mb-2 text-gray-300">+</div>
+          <h3 className="font-medium text-gray-400 text-sm">Ajouter</h3>
+        </button>
+      </div>
+
+      {/* Generate report button */}
+      {piecesCompleted > 0 && (
+        <button onClick={() => goToReport(edl)}
+          className="w-full bg-[#27a96c] text-white font-semibold py-4 rounded-2xl hover:bg-[#1f9058] shadow-lg shadow-green-200 transition-all text-sm">
+          📄 Générer le rapport ({piecesCompleted} pièce{piecesCompleted > 1 ? 's' : ''})
+        </button>
+      )}
+
+      {/* Add room modal */}
+      {showAddRoom && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setShowAddRoom(false)}>
+          <div className="bg-white w-full max-w-[480px] rounded-t-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-[#1e3a5f]">Ajouter une pièce</h3>
+            <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+              placeholder="Nom de la pièce" />
+            <div className="flex gap-3">
+              <button onClick={() => setShowAddRoom(false)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm">
+                Annuler
+              </button>
+              <button onClick={() => { if (customName.trim()) { addCustomRoom(customName.trim()); setCustomName(''); setShowAddRoom(false); } }}
+                className="flex-1 py-3 rounded-xl bg-[#1e3a5f] text-white font-semibold text-sm">
+                Ajouter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== INSPECTION VIEW ====================
+function InspectionView({ piece, step, setStep, formData, saveInspection, photos, uploadPhoto, deletePhoto, edl }) {
+  const [localData, setLocalData] = useState(formData || {});
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
+  useEffect(() => { setLocalData(formData || {}); }, [formData]);
+
+  const update = (key, value) => setLocalData(prev => ({ ...prev, [key]: value }));
+
+  // Photo handling with timestamp
+  const processImage = useCallback(async (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxWidth = 1200;
+          const scale = Math.min(1, maxWidth / img.width);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Draw timestamp
+          const now = new Date();
+          const timestamp = now.toLocaleDateString('fr-FR') + ' ' + now.toLocaleTimeString('fr-FR');
+          const fontSize = Math.max(14, canvas.width * 0.03);
+          ctx.font = `bold ${fontSize}px Arial`;
+          const textWidth = ctx.measureText(timestamp).width;
+          const padding = 8;
+          const x = canvas.width - textWidth - padding * 2;
+          const y = canvas.height - padding * 2;
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.fillRect(x - padding, y - fontSize - padding, textWidth + padding * 2, fontSize + padding * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(timestamp, x, y);
+
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const handleFileSelect = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      const base64 = await processImage(file);
+      await uploadPhoto(base64);
+    }
+    e.target.value = '';
+  }, [processImage, uploadPhoto]);
+
+  const stepNames = ['Général', 'Murs & Plafond', 'Sol', 'Équipements', 'Photos'];
+
+  // Detect room type for specific equipment
+  const roomType = piece?.nom?.toLowerCase() || '';
+  const isKitchen = roomType.includes('cuisine');
+  const isBathroom = roomType.includes('salle de bain') || roomType.includes('bain');
+  const isWC = roomType === 'wc' || roomType.includes('wc');
+
+  return (
+    <div>
+      {/* Progress indicator */}
+      <div className="flex items-center gap-1 mb-6">
+        {[1, 2, 3, 4, 5].map(s => (
+          <div key={s} className="flex-1 flex flex-col items-center">
+            <div className={`w-full h-1.5 rounded-full ${s <= step ? 'bg-[#2d6ac4]' : 'bg-gray-200'} transition-all`} />
+            <span className={`text-[10px] mt-1 ${s === step ? 'text-[#2d6ac4] font-bold' : 'text-gray-400'}`}>{stepNames[s - 1]}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Step 1: General */}
+      {step === 1 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">État général</h2>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">État de la pièce</label>
+            <div className="flex flex-wrap gap-2">
+              {CONDITIONS.map(c => (
+                <button key={c} onClick={() => update('etat_general', c)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${localData.etat_general === c ? conditionColor(c) + ' border-2' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Observations générales</label>
+            <textarea value={localData.observations_generales || ''} onChange={e => update('observations_generales', e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-32"
+              placeholder="Décrivez l'état général de la pièce..." />
+          </div>
+          <StepButtons step={step} onNext={() => saveInspection(localData, 2)} />
+        </div>
+      )}
+
+      {/* Step 2: Walls & Ceiling */}
+      {step === 2 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">Murs & Plafond</h2>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Nature des murs</label>
+            <div className="flex flex-wrap gap-2">
+              {WALL_MATERIALS.map(m => (
+                <button key={m} onClick={() => update('nature_murs', m)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${localData.nature_murs === m ? 'bg-[#e8f0fb] text-[#2d6ac4] border-[#2d6ac4]' : 'bg-white border-gray-200 text-gray-600'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ConditionSelector label="État des murs" value={localData.etat_murs} onChange={v => update('etat_murs', v)} />
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Nature du plafond</label>
+            <div className="flex flex-wrap gap-2">
+              {CEILING_MATERIALS.map(m => (
+                <button key={m} onClick={() => update('nature_plafond', m)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${localData.nature_plafond === m ? 'bg-[#e8f0fb] text-[#2d6ac4] border-[#2d6ac4]' : 'bg-white border-gray-200 text-gray-600'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ConditionSelector label="État du plafond" value={localData.etat_plafond} onChange={v => update('etat_plafond', v)} />
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Observations</label>
+            <textarea value={localData.obs_murs || ''} onChange={e => update('obs_murs', e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-24"
+              placeholder="Observations sur les murs et plafond..." />
+          </div>
+          <StepButtons step={step} onPrev={() => setStep(1)} onNext={() => saveInspection(localData, 3)} />
+        </div>
+      )}
+
+      {/* Step 3: Floor */}
+      {step === 3 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">Sol</h2>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Nature du sol</label>
+            <div className="flex flex-wrap gap-2">
+              {FLOOR_MATERIALS.map(m => (
+                <button key={m} onClick={() => update('nature_sol', m)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${localData.nature_sol === m ? 'bg-[#e8f0fb] text-[#2d6ac4] border-[#2d6ac4]' : 'bg-white border-gray-200 text-gray-600'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ConditionSelector label="État du sol" value={localData.etat_sol} onChange={v => update('etat_sol', v)} />
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Observations</label>
+            <textarea value={localData.obs_sol || ''} onChange={e => update('obs_sol', e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-24"
+              placeholder="Observations sur le sol..." />
+          </div>
+          <StepButtons step={step} onPrev={() => setStep(2)} onNext={() => saveInspection(localData, 4)} />
+        </div>
+      )}
+
+      {/* Step 4: Equipment */}
+      {step === 4 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">Équipements & Menuiseries</h2>
+
+          {/* Windows */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">Fenêtres</label>
+              <input type="number" min="0" value={localData.nb_fenetres || 0} onChange={e => update('nb_fenetres', parseInt(e.target.value) || 0)}
+                className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center" />
+            </div>
+            {(localData.nb_fenetres || 0) > 0 && (
+              <ConditionSelector label="" value={localData.etat_fenetres} onChange={v => update('etat_fenetres', v)} compact />
+            )}
+          </div>
+
+          {/* Doors */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">Portes</label>
+              <input type="number" min="0" value={localData.nb_portes || 0} onChange={e => update('nb_portes', parseInt(e.target.value) || 0)}
+                className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center" />
+            </div>
+            {(localData.nb_portes || 0) > 0 && (
+              <ConditionSelector label="" value={localData.etat_portes} onChange={v => update('etat_portes', v)} compact />
+            )}
+          </div>
+
+          {/* Shutters */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3 mb-2">
+              <label className="text-sm font-medium text-gray-700 flex-1">Volets / Stores</label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={localData.has_volets || false} onChange={e => update('has_volets', e.target.checked)}
+                  className="rounded border-gray-300" />
+                Présent
+              </label>
+            </div>
+            {localData.has_volets && (
+              <ConditionSelector label="" value={localData.etat_volets} onChange={v => update('etat_volets', v)} compact />
+            )}
+          </div>
+
+          {/* Electrical */}
+          <ConditionSelector label="Prises électriques" value={localData.etat_prises} onChange={v => update('etat_prises', v)} />
+          <ConditionSelector label="Interrupteurs" value={localData.etat_interrupteurs} onChange={v => update('etat_interrupteurs', v)} />
+
+          {/* Radiators */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3 mb-2">
+              <label className="text-sm font-medium text-gray-700 flex-1">Radiateurs</label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={localData.has_radiateurs || false} onChange={e => update('has_radiateurs', e.target.checked)}
+                  className="rounded border-gray-300" />
+                Présent
+              </label>
+            </div>
+            {localData.has_radiateurs && (
+              <ConditionSelector label="" value={localData.etat_radiateurs} onChange={v => update('etat_radiateurs', v)} compact />
+            )}
+          </div>
+
+          {/* Kitchen specific */}
+          {isKitchen && (
+            <div className="bg-[#e8f0fb] rounded-xl p-4 space-y-3">
+              <h3 className="font-semibold text-[#1e3a5f] text-sm">🍳 Équipements cuisine</h3>
+              {['Plaques de cuisson', 'Four', 'Hotte', 'Réfrigérateur', 'Évier', 'Robinetterie'].map(eq => (
+                <ConditionSelector key={eq} label={eq} value={localData[`etat_${eq.toLowerCase().replace(/ /g, '_')}`]}
+                  onChange={v => update(`etat_${eq.toLowerCase().replace(/ /g, '_')}`, v)} compact />
+              ))}
+            </div>
+          )}
+
+          {/* Bathroom specific */}
+          {isBathroom && (
+            <div className="bg-[#e8f0fb] rounded-xl p-4 space-y-3">
+              <h3 className="font-semibold text-[#1e3a5f] text-sm">🚿 Équipements salle de bain</h3>
+              {['Baignoire/Douche', 'Lavabo', 'Robinetterie', 'WC'].map(eq => (
+                <ConditionSelector key={eq} label={eq} value={localData[`etat_sdb_${eq.toLowerCase().replace(/[\/ ]/g, '_')}`]}
+                  onChange={v => update(`etat_sdb_${eq.toLowerCase().replace(/[\/ ]/g, '_')}`, v)} compact />
+              ))}
+            </div>
+          )}
+
+          {/* WC specific */}
+          {isWC && (
+            <div className="bg-[#e8f0fb] rounded-xl p-4 space-y-3">
+              <h3 className="font-semibold text-[#1e3a5f] text-sm">🚽 Équipements WC</h3>
+              {['Cuvette', 'Chasse d\'eau', 'Robinetterie'].map(eq => (
+                <ConditionSelector key={eq} label={eq} value={localData[`etat_wc_${eq.toLowerCase().replace(/[' ]/g, '_')}`]}
+                  onChange={v => update(`etat_wc_${eq.toLowerCase().replace(/[' ]/g, '_')}`, v)} compact />
+              ))}
+            </div>
+          )}
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Observations</label>
+            <textarea value={localData.obs_equipements || ''} onChange={e => update('obs_equipements', e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-24"
+              placeholder="Observations sur les équipements..." />
+          </div>
+          <StepButtons step={step} onPrev={() => setStep(3)} onNext={() => saveInspection(localData, 5)} />
+        </div>
+      )}
+
+      {/* Step 5: Photos */}
+      {step === 5 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">Photos</h2>
+          <p className="text-sm text-gray-500">Prenez des photos ou importez-les. Un horodatage sera automatiquement ajouté.</p>
+
+          <div className="flex gap-3">
+            <button onClick={() => cameraInputRef.current?.click()}
+              className="flex-1 bg-[#2d6ac4] text-white py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2">
+              📸 Prendre une photo
+            </button>
+            <button onClick={() => fileInputRef.current?.click()}
+              className="flex-1 bg-white border-2 border-[#2d6ac4] text-[#2d6ac4] py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2">
+              🖼 Galerie
+            </button>
+          </div>
+
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
+
+          {/* Photo grid */}
+          {photos.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {photos.map(photo => (
+                <div key={photo.id} className="relative bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+                  <img src={photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" />
+                  <button onClick={() => deletePhoto(photo.id)}
+                    className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center shadow">
+                    ✕
+                  </button>
+                  <div className="p-2">
+                    <p className="text-[10px] text-gray-400">{new Date(photo.horodatage).toLocaleString('fr-FR')}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {photos.length === 0 && (
+            <div className="bg-white rounded-xl p-8 text-center border border-dashed border-gray-200">
+              <div className="text-4xl mb-2">📷</div>
+              <p className="text-sm text-gray-400">Aucune photo pour le moment</p>
+            </div>
+          )}
+
+          <StepButtons step={step} onPrev={() => setStep(4)} onNext={() => saveInspection(localData, 6)} nextLabel="✓ Terminer la pièce" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== CONDITION SELECTOR ====================
+function ConditionSelector({ label, value, onChange, compact }) {
+  return (
+    <div className={compact ? '' : 'mb-3'}>
+      {label && <label className="text-sm font-medium text-gray-700 mb-2 block">{label}</label>}
+      <div className="flex flex-wrap gap-1.5">
+        {CONDITIONS.map(c => (
+          <button key={c} onClick={() => onChange(c)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${value === c ? conditionColor(c) + ' border-2' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+            {c}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ==================== STEP BUTTONS ====================
+function StepButtons({ step, onPrev, onNext, nextLabel }) {
+  return (
+    <div className="flex gap-3 pt-4">
+      {step > 1 && (
+        <button onClick={onPrev} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50">
+          ← Précédent
+        </button>
+      )}
+      <button onClick={onNext}
+        className={`flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all ${step === 5 ? 'bg-[#27a96c] hover:bg-[#1f9058]' : 'bg-[#2d6ac4] hover:bg-[#2560b5]'}`}>
+        {nextLabel || 'Suivant →'}
+      </button>
+    </div>
+  );
+}
+
+// ==================== REPORT VIEW ====================
+function ReportView({ edl, pieces, showNotif }) {
+  const [generating, setGenerating] = useState(false);
+  const [paid, setPaid] = useState(edl?.paid || false);
+  const [paying, setPaying] = useState(false);
+  const [signName, setSignName] = useState('');
+  const [signed, setSigned] = useState(false);
+  const [allPhotos, setAllPhotos] = useState({});
+  const [loadingPhotos, setLoadingPhotos] = useState(true);
+
+  // Fetch all photos for all pieces
+  useEffect(() => {
+    async function loadPhotos() {
+      setLoadingPhotos(true);
+      const photoMap = {};
+      for (const piece of (pieces || [])) {
+        try {
+          const data = await api(`photos?piece_id=${piece.id}`);
+          photoMap[piece.id] = data;
+        } catch (e) { photoMap[piece.id] = []; }
+      }
+      setAllPhotos(photoMap);
+      setLoadingPhotos(false);
+    }
+    loadPhotos();
+  }, [pieces]);
+
+  const completedPieces = (pieces || []).filter(p => p.statut === 'completed');
+  const totalPhotos = Object.values(allPhotos).reduce((acc, arr) => acc + arr.length, 0);
+
+  const handlePayment = async () => {
+    setPaying(true);
+    try {
+      // MOCK PAYMENT - Replace with Stripe integration
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await api('payment', { method: 'POST', body: JSON.stringify({ edl_id: edl.id }) });
+      setPaid(true);
+      showNotif('Paiement réussi ! (MOCK)');
+    } catch (e) { showNotif(e.message, 'error'); }
+    setPaying(false);
+  };
+
+  const generatePDF = async () => {
+    setGenerating(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = 210;
+      const margin = 20;
+      const contentWidth = pageWidth - margin * 2;
+      let y = margin;
+      const reportId = 'EDL-' + (edl.id || '').substring(0, 8).toUpperCase();
+
+      // Helper functions
+      const addPage = () => { doc.addPage(); y = margin; addFooter(); };
+      const checkSpace = (needed) => { if (y + needed > 270) addPage(); };
+      const addFooter = () => {
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`${reportId} | ${new Date().toLocaleDateString('fr-FR')}`, margin, 290);
+        doc.text('État des Lieux Pro', pageWidth - margin, 290, { align: 'right' });
+      };
+
+      // ---- COVER PAGE ----
+      doc.setFillColor(30, 58, 95);
+      doc.rect(0, 0, pageWidth, 80, 'F');
+      doc.setTextColor(255);
+      doc.setFontSize(28);
+      doc.text('État des Lieux', pageWidth / 2, 35, { align: 'center' });
+      doc.setFontSize(14);
+      doc.text(edl.type_edl === 'Entrée' ? "d'Entrée" : 'de Sortie', pageWidth / 2, 48, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.text(new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth / 2, 65, { align: 'center' });
+
+      y = 100;
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(12);
+      doc.text('Adresse du bien', margin, y); y += 7;
+      doc.setTextColor(80);
+      doc.setFontSize(11);
+      doc.text(edl.adresse || '', margin, y); y += 12;
+
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(12);
+      doc.text('Type de logement', margin, y); y += 7;
+      doc.setTextColor(80);
+      doc.setFontSize(11);
+      doc.text(edl.type_logement || '', margin, y); y += 12;
+
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(12);
+      doc.text('Locataire', margin, y); y += 7;
+      doc.setTextColor(80);
+      doc.text(edl.nom_locataire || '', margin, y); y += 12;
+
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(12);
+      doc.text('Propriétaire', margin, y); y += 7;
+      doc.setTextColor(80);
+      doc.text(edl.nom_proprietaire || '', margin, y); y += 12;
+
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(12);
+      doc.text('Numéro de rapport', margin, y); y += 7;
+      doc.setTextColor(80);
+      doc.text(reportId, margin, y);
+
+      addFooter();
+
+      // ---- ROOM PAGES ----
+      for (const piece of completedPieces) {
+        addPage();
+        const data = piece.donnees_json || {};
+
+        // Room header
+        doc.setFillColor(232, 240, 251);
+        doc.rect(margin, y, contentWidth, 12, 'F');
+        doc.setTextColor(30, 58, 95);
+        doc.setFontSize(14);
+        doc.text(`${piece.icon || ''} ${piece.nom}`, margin + 4, y + 8);
+        y += 18;
+
+        // General condition
+        if (data.etat_general) {
+          doc.setFontSize(10);
+          doc.setTextColor(30, 58, 95);
+          doc.text('État général : ', margin, y);
+          doc.setTextColor(80);
+          doc.text(data.etat_general, margin + 30, y);
+          y += 7;
+        }
+        if (data.observations_generales) {
+          doc.setTextColor(100);
+          doc.setFontSize(9);
+          const lines = doc.splitTextToSize(`Observations : ${data.observations_generales}`, contentWidth);
+          doc.text(lines, margin, y);
+          y += lines.length * 5 + 3;
+        }
+
+        // Walls & Ceiling
+        checkSpace(30);
+        doc.setFontSize(10);
+        doc.setTextColor(30, 58, 95);
+        if (data.nature_murs) { doc.text(`Murs : ${data.nature_murs} — ${data.etat_murs || ''}`, margin, y); y += 6; }
+        if (data.nature_plafond) { doc.text(`Plafond : ${data.nature_plafond} — ${data.etat_plafond || ''}`, margin, y); y += 6; }
+        if (data.obs_murs) {
+          doc.setTextColor(100); doc.setFontSize(9);
+          const lines = doc.splitTextToSize(data.obs_murs, contentWidth);
+          doc.text(lines, margin, y); y += lines.length * 5 + 3;
+        }
+
+        // Floor
+        checkSpace(20);
+        doc.setFontSize(10); doc.setTextColor(30, 58, 95);
+        if (data.nature_sol) { doc.text(`Sol : ${data.nature_sol} — ${data.etat_sol || ''}`, margin, y); y += 6; }
+        if (data.obs_sol) {
+          doc.setTextColor(100); doc.setFontSize(9);
+          const lines = doc.splitTextToSize(data.obs_sol, contentWidth);
+          doc.text(lines, margin, y); y += lines.length * 5 + 3;
+        }
+
+        // Equipment summary
+        checkSpace(30);
+        doc.setFontSize(10); doc.setTextColor(30, 58, 95);
+        if (data.nb_fenetres) doc.text(`Fenêtres : ${data.nb_fenetres} — ${data.etat_fenetres || ''}`, margin, y), y += 6;
+        if (data.nb_portes) doc.text(`Portes : ${data.nb_portes} — ${data.etat_portes || ''}`, margin, y), y += 6;
+        if (data.has_volets) doc.text(`Volets/Stores : ${data.etat_volets || ''}`, margin, y), y += 6;
+        if (data.etat_prises) doc.text(`Prises : ${data.etat_prises}`, margin, y), y += 6;
+        if (data.etat_interrupteurs) doc.text(`Interrupteurs : ${data.etat_interrupteurs}`, margin, y), y += 6;
+        if (data.has_radiateurs) doc.text(`Radiateurs : ${data.etat_radiateurs || ''}`, margin, y), y += 6;
+
+        // Photos
+        const piecePhotos = allPhotos[piece.id] || [];
+        if (piecePhotos.length > 0) {
+          checkSpace(50);
+          doc.setFontSize(10); doc.setTextColor(30, 58, 95);
+          doc.text(`Photos (${piecePhotos.length})`, margin, y); y += 5;
+
+          for (const photo of piecePhotos) {
+            checkSpace(55);
+            try {
+              if (photo.data && photo.data.startsWith('data:')) {
+                doc.addImage(photo.data, 'JPEG', margin, y, 50, 40);
+                if (photo.legende) {
+                  doc.setFontSize(8); doc.setTextColor(100);
+                  doc.text(photo.legende, margin + 55, y + 5);
+                }
+                doc.setFontSize(7); doc.setTextColor(150);
+                doc.text(new Date(photo.horodatage).toLocaleString('fr-FR'), margin + 55, y + 12);
+                y += 45;
+              }
+            } catch (e) { y += 5; }
+          }
+        }
+      }
+
+      // ---- SIGNATURE PAGE ----
+      addPage();
+      doc.setFontSize(16); doc.setTextColor(30, 58, 95);
+      doc.text('Signatures', pageWidth / 2, y, { align: 'center' }); y += 15;
+
+      doc.setFontSize(10);
+      doc.text('Le locataire :', margin, y); y += 6;
+      doc.text(edl.nom_locataire || '', margin, y); y += 4;
+      if (signed && signName) {
+        doc.setFontSize(9); doc.setTextColor(39, 169, 108);
+        doc.text(`✓ Signé électroniquement par ${signName}`, margin, y + 5);
+      }
+      y += 20;
+
+      doc.setTextColor(30, 58, 95); doc.setFontSize(10);
+      doc.text('Le propriétaire :', margin, y); y += 6;
+      doc.text(edl.nom_proprietaire || '', margin, y); y += 20;
+
+      doc.setFontSize(9); doc.setTextColor(100);
+      doc.text(`Document généré le ${new Date().toLocaleDateString('fr-FR')} — ${reportId}`, margin, y);
+
+      addFooter();
+
+      // Save
+      doc.save(`EDL_${edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_') || 'rapport'}_${reportId}.pdf`);
+      showNotif('PDF téléchargé !');
+    } catch (e) {
+      console.error('PDF Error:', e);
+      showNotif('Erreur génération PDF: ' + e.message, 'error');
+    }
+    setGenerating(false);
+  };
+
+  const shareWhatsApp = () => {
+    const text = encodeURIComponent(`État des lieux - ${edl.adresse}\nType: ${edl.type_edl}\nLocataire: ${edl.nom_locataire}\nPropriétaire: ${edl.nom_proprietaire}\nDate: ${new Date().toLocaleDateString('fr-FR')}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const sendEmail = () => {
+    // MOCK - Replace with EmailJS
+    showNotif('Envoi par email (MOCK) - Configurez EmailJS pour activer', 'error');
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Summary */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 className="text-lg font-bold text-[#1e3a5f] mb-4">📋 Récapitulatif</h2>
+        <div className="space-y-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Adresse</span>
+            <span className="font-medium text-[#1e3a5f]">{edl?.adresse}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Type</span>
+            <span className="font-medium">{edl?.type_logement} — {edl?.type_edl}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Locataire</span>
+            <span className="font-medium">{edl?.nom_locataire}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Propriétaire</span>
+            <span className="font-medium">{edl?.nom_proprietaire}</span>
+          </div>
+          <div className="border-t border-gray-100 pt-3 flex justify-between text-sm">
+            <span className="text-gray-500">Pièces inspectées</span>
+            <span className="font-bold text-[#27a96c]">{completedPieces.length}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Photos prises</span>
+            <span className="font-bold text-[#2d6ac4]">{loadingPhotos ? '...' : totalPhotos}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Signature */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h3 className="font-bold text-[#1e3a5f] mb-3">✍️ Signature électronique</h3>
+        <div className="flex items-center gap-3 mb-3">
+          <input type="checkbox" checked={signed} onChange={e => setSigned(e.target.checked)}
+            className="w-5 h-5 rounded border-gray-300 text-[#2d6ac4]" />
+          <span className="text-sm text-gray-600">Je confirme l'exactitude des informations</span>
+        </div>
+        {signed && (
+          <input type="text" value={signName} onChange={e => setSignName(e.target.value)}
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+            placeholder="Votre nom complet" />
+        )}
+      </div>
+
+      {/* Payment */}
+      {!paid && (
+        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d6ac4] rounded-2xl p-5 text-white">
+          <h3 className="font-bold mb-2">💳 Paiement</h3>
+          <p className="text-sm text-white/80 mb-4">Générez votre rapport PDF professionnel pour seulement 4,99€</p>
+          <button onClick={handlePayment} disabled={paying}
+            className="w-full bg-white text-[#1e3a5f] font-bold py-3 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all">
+            {paying ? '⏳ Traitement...' : '💳 Payer 4,99€ (MOCK)'}
+          </button>
+        </div>
+      )}
+
+      {/* Actions after payment */}
+      {paid && (
+        <div className="space-y-3">
+          <button onClick={generatePDF} disabled={generating}
+            className="w-full bg-[#27a96c] text-white font-bold py-4 rounded-2xl hover:bg-[#1f9058] disabled:opacity-50 shadow-lg shadow-green-200 transition-all text-sm">
+            {generating ? '⏳ Génération en cours...' : '📥 Télécharger le PDF'}
+          </button>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={sendEmail}
+              className="bg-white border border-gray-200 text-gray-700 font-medium py-3 rounded-xl hover:bg-gray-50 text-sm transition-all">
+              📧 Email
+            </button>
+            <button onClick={shareWhatsApp}
+              className="bg-[#25d366] text-white font-medium py-3 rounded-xl hover:bg-[#1fb855] text-sm transition-all">
+              💬 WhatsApp
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
