@@ -140,10 +140,28 @@ export default function DownloadPage({ params }) {
           for (const photo of photos) {
             checkSpace(60);
             try {
-              if (photo.data && photo.data.startsWith('data:')) {
+              let imageData = photo.url || photo.data;
+              
+              // Convert Cloudinary URL to base64 for PDF
+              if (imageData && imageData.startsWith('http')) {
+                try {
+                  const response = await fetch(imageData);
+                  const blob = await response.blob();
+                  imageData = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                  });
+                } catch (err) {
+                  console.error('Error loading image from Cloudinary:', err);
+                  imageData = null;
+                }
+              }
+              
+              if (imageData && imageData.startsWith('data:')) {
                 doc.setDrawColor(200);
                 doc.rect(margin, y, contentWidth, 52, 'S');
-                doc.addImage(photo.data, 'JPEG', margin + 2, y + 2, 48, 38);
+                doc.addImage(imageData, 'JPEG', margin + 2, y + 2, 48, 38);
                 const infoX = margin + 54;
                 if (photo.ai_analysis) {
                   if (photo.ai_analysis.verified) {
