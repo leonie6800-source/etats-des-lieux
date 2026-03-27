@@ -175,14 +175,11 @@ export default function App() {
 
   const fetchPhotos = useCallback(async (pieceId) => {
     try {
-      console.log('📸 fetchPhotos for piece:', pieceId);
       const cacheBuster = Date.now();
       const data = await api(`photos?piece_id=${pieceId}&_t=${cacheBuster}`);
-      console.log('📸 Photos fetched:', data.length, 'photos');
-      console.log('📸 Photos data:', data);
       setPhotos(data);
     } catch (e) { 
-      console.error('❌ fetchPhotos error:', e); 
+      console.error('Erreur chargement photos:', e); 
     }
   }, []);
 
@@ -251,21 +248,12 @@ export default function App() {
 
   // ---- Photo handling ----
   const uploadPhoto = async (base64Data, legende = '', gpsData = null) => {
-    console.log('📸 uploadPhoto called', { 
-      currentPiece: currentPiece?.id, 
-      currentPieceName: currentPiece?.nom,
-      currentEdl: currentEdl?.id, 
-      base64Length: base64Data?.length 
-    });
     if (!currentPiece || !currentEdl) {
-      console.error('❌ uploadPhoto: Missing currentPiece or currentEdl', { currentPiece, currentEdl });
       showNotif('Erreur: pièce ou EDL non défini', 'error');
       return;
     }
     try {
-      // Get GPS if not provided
       const gps = gpsData || await getGPS();
-      console.log('📸 Sending POST to /api/photos with piece_id:', currentPiece.id);
       
       const response = await api('photos', {
         method: 'POST',
@@ -278,16 +266,13 @@ export default function App() {
           gps,
         }),
       });
-      console.log('📸 Upload successful, response:', response);
       
       // Small delay to ensure DB has written
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      console.log('📸 Now fetching photos for piece:', currentPiece.id);
       await fetchPhotos(currentPiece.id);
       showNotif('Photo ajoutée !');
     } catch (e) { 
-      console.error('❌ uploadPhoto error:', e);
       showNotif(e.message, 'error'); 
     }
   };
@@ -666,13 +651,9 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
   }, []);
 
   const handleFileSelect = async (e) => {
-    console.log('📸 handleFileSelect called', e.target.files);
     const files = Array.from(e.target.files || []);
-    console.log('📸 Files to process:', files.length);
     for (const file of files) {
-      console.log('📸 Processing file:', file.name);
       const base64 = await processImage(file);
-      console.log('📸 Image processed, uploading...');
       await uploadPhoto(base64);
     }
     e.target.value = '';
@@ -926,12 +907,11 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
 
           {/* Photo grid */}
-          {console.log('📸 Rendering photos, count:', photos.length, photos)}
           {photos.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               {photos.map(photo => (
                 <div key={photo.id} className="relative bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                  <img src={photo.url || photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" crossOrigin="anonymous" onError={(e) => console.error('❌ Image load error:', photo.id, e)} onLoad={() => console.log('✅ Image loaded:', photo.id)} />
+                  <img src={photo.url || photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" crossOrigin="anonymous" />
                   <button onClick={() => deletePhoto(photo.id)}
                     className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center shadow">
                     ✕
