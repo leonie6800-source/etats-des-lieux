@@ -940,8 +940,11 @@ function ReportView({ edl, pieces, showNotif }) {
   const [signed, setSigned] = useState(false);
   const [allPhotos, setAllPhotos] = useState({});
   const [loadingPhotos, setLoadingPhotos] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState('one_shot');
+  const [addons, setAddons] = useState({ comparaison_ia: false, archive_securisee: false, archive_type: 'one_time' });
+  const [showInvoices, setShowInvoices] = useState(false);
+  const [invoices, setInvoices] = useState([]);
 
-  // Fetch all photos for all pieces
   useEffect(() => {
     async function loadPhotos() {
       setLoadingPhotos(true);
@@ -958,17 +961,41 @@ function ReportView({ edl, pieces, showNotif }) {
     loadPhotos();
   }, [pieces]);
 
+  useEffect(() => {
+    async function loadInvoices() {
+      try {
+        const data = await api('invoices');
+        setInvoices(data);
+      } catch (e) { /* ignore */ }
+    }
+    loadInvoices();
+  }, [paid]);
+
   const completedPieces = (pieces || []).filter(p => p.statut === 'completed');
   const totalPhotos = Object.values(allPhotos).reduce((acc, arr) => acc + arr.length, 0);
+
+  // Pricing
+  const plans = [
+    { id: 'one_shot', name: 'À l\'acte', price: 9.90, desc: '1 état des lieux', badge: null },
+    { id: 'pack_pro', name: 'Pack Pro', price: 49, desc: '10 dossiers/mois\npuis 5€/dossier', badge: 'Populaire' },
+    { id: 'business', name: 'Business', price: 149, desc: 'Dossiers illimités\nSupport prioritaire', badge: 'Illimité' },
+  ];
+  const currentPlan = plans.find(p => p.id === selectedPlan) || plans[0];
+  let addonsTotal = 0;
+  if (addons.comparaison_ia) addonsTotal += 2;
+  if (addons.archive_securisee) addonsTotal += addons.archive_type === 'monthly' ? 1 : 10;
+  const totalPrice = currentPlan.price + addonsTotal;
 
   const handlePayment = async () => {
     setPaying(true);
     try {
-      // MOCK PAYMENT - Replace with Stripe integration
       await new Promise(resolve => setTimeout(resolve, 1500));
-      await api('payment', { method: 'POST', body: JSON.stringify({ edl_id: edl.id }) });
+      const result = await api('payment', {
+        method: 'POST',
+        body: JSON.stringify({ edl_id: edl.id, plan: selectedPlan, addons }),
+      });
       setPaid(true);
-      showNotif('Paiement réussi ! (MOCK)');
+      showNotif(`Paiement de ${totalPrice.toFixed(2)}€ réussi ! (MOCK — Stripe bientôt)`);
     } catch (e) { showNotif(e.message, 'error'); }
     setPaying(false);
   };
@@ -983,15 +1010,20 @@ function ReportView({ edl, pieces, showNotif }) {
       const contentWidth = pageWidth - margin * 2;
       let y = margin;
       const reportId = 'EDL-' + (edl.id || '').substring(0, 8).toUpperCase();
+      const hasAICert = edl?.has_comparaison_ia || edl?.has_archive || addons.comparaison_ia || addons.archive_securisee;
 
-      // Helper functions
       const addPage = () => { doc.addPage(); y = margin; addFooter(); };
       const checkSpace = (needed) => { if (y + needed > 270) addPage(); };
       const addFooter = () => {
-        doc.setFontSize(8);
-        doc.setTextColor(150);
+        doc.setFontSize(8); doc.setTextColor(150);
         doc.text(`${reportId} | ${new Date().toLocaleDateString('fr-FR')}`, margin, 290);
-        doc.text('État des Lieux Pro', pageWidth - margin, 290, { align: 'right' });
+        doc.text('Etat des Lieux Pro', pageWidth - margin, 290, { align: 'right' });
+        if (hasAICert) {
+          doc.setFillColor(39, 169, 108);
+          doc.roundedRect(pageWidth / 2 - 20, 286, 40, 6, 1, 1, 'F');
+          doc.setFontSize(6); doc.setTextColor(255);
+          doc.text('Certifie IA', pageWidth / 2, 290, { align: 'center' });
+        }
       };
 
       // ---- COVER PAGE ----
@@ -999,111 +1031,78 @@ function ReportView({ edl, pieces, showNotif }) {
       doc.rect(0, 0, pageWidth, 80, 'F');
       doc.setTextColor(255);
       doc.setFontSize(28);
-      doc.text('État des Lieux', pageWidth / 2, 35, { align: 'center' });
+      doc.text('Etat des Lieux', pageWidth / 2, 35, { align: 'center' });
       doc.setFontSize(14);
-      doc.text(edl.type_edl === 'Entrée' ? "d'Entrée" : 'de Sortie', pageWidth / 2, 48, { align: 'center' });
-
+      doc.text(edl.type_edl === 'Entrée' ? "d'Entree" : 'de Sortie', pageWidth / 2, 48, { align: 'center' });
       doc.setFontSize(10);
       doc.text(new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth / 2, 65, { align: 'center' });
 
+      // AI Certification badge on cover
+      if (hasAICert) {
+        doc.setFillColor(39, 169, 108);
+        doc.roundedRect(pageWidth / 2 - 25, 70, 50, 8, 2, 2, 'F');
+        doc.setFontSize(8); doc.setTextColor(255);
+        doc.text('Certifie par Intelligence Artificielle', pageWidth / 2, 75.5, { align: 'center' });
+      }
+
       y = 100;
-      doc.setTextColor(30, 58, 95);
-      doc.setFontSize(12);
+      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
       doc.text('Adresse du bien', margin, y); y += 7;
-      doc.setTextColor(80);
-      doc.setFontSize(11);
+      doc.setTextColor(80); doc.setFontSize(11);
       doc.text(edl.adresse || '', margin, y); y += 12;
-
-      doc.setTextColor(30, 58, 95);
-      doc.setFontSize(12);
+      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
       doc.text('Type de logement', margin, y); y += 7;
-      doc.setTextColor(80);
-      doc.setFontSize(11);
-      doc.text(edl.type_logement || '', margin, y); y += 12;
-
-      doc.setTextColor(30, 58, 95);
-      doc.setFontSize(12);
+      doc.setTextColor(80); doc.text(edl.type_logement || '', margin, y); y += 12;
+      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
       doc.text('Locataire', margin, y); y += 7;
-      doc.setTextColor(80);
-      doc.text(edl.nom_locataire || '', margin, y); y += 12;
-
-      doc.setTextColor(30, 58, 95);
-      doc.setFontSize(12);
-      doc.text('Propriétaire', margin, y); y += 7;
-      doc.setTextColor(80);
-      doc.text(edl.nom_proprietaire || '', margin, y); y += 12;
-
-      doc.setTextColor(30, 58, 95);
-      doc.setFontSize(12);
-      doc.text('Numéro de rapport', margin, y); y += 7;
-      doc.setTextColor(80);
-      doc.text(reportId, margin, y);
-
+      doc.setTextColor(80); doc.text(edl.nom_locataire || '', margin, y); y += 12;
+      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
+      doc.text('Proprietaire', margin, y); y += 7;
+      doc.setTextColor(80); doc.text(edl.nom_proprietaire || '', margin, y); y += 12;
+      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
+      doc.text('Numero de rapport', margin, y); y += 7;
+      doc.setTextColor(80); doc.text(reportId, margin, y);
       addFooter();
 
       // ---- ROOM PAGES ----
       for (const piece of completedPieces) {
         addPage();
         const data = piece.donnees_json || {};
-
-        // Room header
         doc.setFillColor(232, 240, 251);
         doc.rect(margin, y, contentWidth, 12, 'F');
-        doc.setTextColor(30, 58, 95);
-        doc.setFontSize(14);
+        doc.setTextColor(30, 58, 95); doc.setFontSize(14);
         doc.text(`${piece.icon || ''} ${piece.nom}`, margin + 4, y + 8);
         y += 18;
 
-        // General condition
         if (data.etat_general) {
-          doc.setFontSize(10);
-          doc.setTextColor(30, 58, 95);
-          doc.text('État général : ', margin, y);
-          doc.setTextColor(80);
-          doc.text(data.etat_general, margin + 30, y);
-          y += 7;
+          doc.setFontSize(10); doc.setTextColor(30, 58, 95);
+          doc.text('Etat general : ', margin, y);
+          doc.setTextColor(80); doc.text(data.etat_general, margin + 30, y); y += 7;
         }
         if (data.observations_generales) {
-          doc.setTextColor(100);
-          doc.setFontSize(9);
-          const lines = doc.splitTextToSize(`Observations : ${data.observations_generales}`, contentWidth);
-          doc.text(lines, margin, y);
-          y += lines.length * 5 + 3;
-        }
-
-        // Walls & Ceiling
-        checkSpace(30);
-        doc.setFontSize(10);
-        doc.setTextColor(30, 58, 95);
-        if (data.nature_murs) { doc.text(`Murs : ${data.nature_murs} — ${data.etat_murs || ''}`, margin, y); y += 6; }
-        if (data.nature_plafond) { doc.text(`Plafond : ${data.nature_plafond} — ${data.etat_plafond || ''}`, margin, y); y += 6; }
-        if (data.obs_murs) {
           doc.setTextColor(100); doc.setFontSize(9);
-          const lines = doc.splitTextToSize(data.obs_murs, contentWidth);
+          const lines = doc.splitTextToSize(`Observations : ${data.observations_generales}`, contentWidth);
           doc.text(lines, margin, y); y += lines.length * 5 + 3;
         }
-
-        // Floor
+        checkSpace(30);
+        doc.setFontSize(10); doc.setTextColor(30, 58, 95);
+        if (data.nature_murs) { doc.text(`Murs : ${data.nature_murs} - ${data.etat_murs || ''}`, margin, y); y += 6; }
+        if (data.nature_plafond) { doc.text(`Plafond : ${data.nature_plafond} - ${data.etat_plafond || ''}`, margin, y); y += 6; }
+        if (data.obs_murs) { doc.setTextColor(100); doc.setFontSize(9); const l = doc.splitTextToSize(data.obs_murs, contentWidth); doc.text(l, margin, y); y += l.length * 5 + 3; }
         checkSpace(20);
         doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-        if (data.nature_sol) { doc.text(`Sol : ${data.nature_sol} — ${data.etat_sol || ''}`, margin, y); y += 6; }
-        if (data.obs_sol) {
-          doc.setTextColor(100); doc.setFontSize(9);
-          const lines = doc.splitTextToSize(data.obs_sol, contentWidth);
-          doc.text(lines, margin, y); y += lines.length * 5 + 3;
-        }
-
-        // Equipment summary
+        if (data.nature_sol) { doc.text(`Sol : ${data.nature_sol} - ${data.etat_sol || ''}`, margin, y); y += 6; }
+        if (data.obs_sol) { doc.setTextColor(100); doc.setFontSize(9); const l = doc.splitTextToSize(data.obs_sol, contentWidth); doc.text(l, margin, y); y += l.length * 5 + 3; }
         checkSpace(30);
         doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-        if (data.nb_fenetres) doc.text(`Fenêtres : ${data.nb_fenetres} — ${data.etat_fenetres || ''}`, margin, y), y += 6;
-        if (data.nb_portes) doc.text(`Portes : ${data.nb_portes} — ${data.etat_portes || ''}`, margin, y), y += 6;
-        if (data.has_volets) doc.text(`Volets/Stores : ${data.etat_volets || ''}`, margin, y), y += 6;
-        if (data.etat_prises) doc.text(`Prises : ${data.etat_prises}`, margin, y), y += 6;
-        if (data.etat_interrupteurs) doc.text(`Interrupteurs : ${data.etat_interrupteurs}`, margin, y), y += 6;
-        if (data.has_radiateurs) doc.text(`Radiateurs : ${data.etat_radiateurs || ''}`, margin, y), y += 6;
+        if (data.nb_fenetres) { doc.text(`Fenetres : ${data.nb_fenetres} - ${data.etat_fenetres || ''}`, margin, y); y += 6; }
+        if (data.nb_portes) { doc.text(`Portes : ${data.nb_portes} - ${data.etat_portes || ''}`, margin, y); y += 6; }
+        if (data.has_volets) { doc.text(`Volets/Stores : ${data.etat_volets || ''}`, margin, y); y += 6; }
+        if (data.etat_prises) { doc.text(`Prises : ${data.etat_prises}`, margin, y); y += 6; }
+        if (data.etat_interrupteurs) { doc.text(`Interrupteurs : ${data.etat_interrupteurs}`, margin, y); y += 6; }
+        if (data.has_radiateurs) { doc.text(`Radiateurs : ${data.etat_radiateurs || ''}`, margin, y); y += 6; }
 
-        // Photos - Enhanced with AI badges, GPS, and table layout
+        // Photos
         const piecePhotos = allPhotos[piece.id] || [];
         if (piecePhotos.length > 0) {
           checkSpace(15);
@@ -1116,17 +1115,10 @@ function ReportView({ edl, pieces, showNotif }) {
             checkSpace(60);
             try {
               if (photo.data && photo.data.startsWith('data:')) {
-                // Photo in a bordered box
                 doc.setDrawColor(200);
                 doc.rect(margin, y, contentWidth, 52, 'S');
-
-                // Photo image
                 doc.addImage(photo.data, 'JPEG', margin + 2, y + 2, 48, 38);
-
-                // Info column next to photo
                 const infoX = margin + 54;
-
-                // AI Verification Badge
                 if (photo.ai_analysis) {
                   if (photo.ai_analysis.verified) {
                     doc.setFillColor(39, 169, 108);
@@ -1137,38 +1129,21 @@ function ReportView({ edl, pieces, showNotif }) {
                     doc.setFillColor(220, 53, 69);
                     doc.roundedRect(infoX, y + 2, 35, 6, 1, 1, 'F');
                     doc.setFontSize(7); doc.setTextColor(255);
-                    doc.text('Defauts detectes (IA)', infoX + 2, y + 6.5);
+                    doc.text('Defauts (IA)', infoX + 2, y + 6.5);
                   }
                 }
-
-                // Timestamp
                 doc.setFontSize(8); doc.setTextColor(100);
                 doc.text(`Date : ${new Date(photo.horodatage).toLocaleString('fr-FR')}`, infoX, y + 16);
-
-                // GPS coordinates
-                if (photo.gps) {
-                  doc.text(`GPS : ${photo.gps.lat}, ${photo.gps.lng}`, infoX, y + 22);
-                }
-
-                // AI observations
+                if (photo.gps) { doc.text(`GPS : ${photo.gps.lat}, ${photo.gps.lng}`, infoX, y + 22); }
                 if (photo.ai_analysis?.observations) {
                   doc.setFontSize(7); doc.setTextColor(45, 106, 196);
-                  const obsLines = doc.splitTextToSize(`IA : ${photo.ai_analysis.observations}`, contentWidth - 56);
-                  doc.text(obsLines.slice(0, 3), infoX, y + 30);
+                  const ol = doc.splitTextToSize(`IA : ${photo.ai_analysis.observations}`, contentWidth - 56);
+                  doc.text(ol.slice(0, 3), infoX, y + 30);
                 }
-
-                // AI condition rating
                 if (photo.ai_analysis?.etat_general) {
                   doc.setFontSize(7); doc.setTextColor(100);
                   doc.text(`Etat IA : ${photo.ai_analysis.etat_general}/5`, infoX, y + 44);
                 }
-
-                // Caption
-                if (photo.legende) {
-                  doc.setFontSize(7); doc.setTextColor(80);
-                  doc.text(photo.legende.substring(0, 60), margin + 2, y + 48);
-                }
-
                 y += 56;
               }
             } catch (e) { y += 5; }
@@ -1176,58 +1151,90 @@ function ReportView({ edl, pieces, showNotif }) {
         }
       }
 
-      // ---- SIGNATURE PAGE ----
+      // Signature page
       addPage();
       doc.setFontSize(16); doc.setTextColor(30, 58, 95);
       doc.text('Signatures', pageWidth / 2, y, { align: 'center' }); y += 15;
-
       doc.setFontSize(10);
       doc.text('Le locataire :', margin, y); y += 6;
       doc.text(edl.nom_locataire || '', margin, y); y += 4;
       if (signed && signName) {
         doc.setFontSize(9); doc.setTextColor(39, 169, 108);
-        doc.text(`✓ Signé électroniquement par ${signName}`, margin, y + 5);
+        doc.text(`Signe electroniquement par ${signName}`, margin, y + 5);
       }
       y += 20;
-
       doc.setTextColor(30, 58, 95); doc.setFontSize(10);
-      doc.text('Le propriétaire :', margin, y); y += 6;
+      doc.text('Le proprietaire :', margin, y); y += 6;
       doc.text(edl.nom_proprietaire || '', margin, y); y += 20;
-
       doc.setFontSize(9); doc.setTextColor(100);
-      doc.text(`Document généré le ${new Date().toLocaleDateString('fr-FR')} — ${reportId}`, margin, y);
-
+      doc.text(`Document genere le ${new Date().toLocaleDateString('fr-FR')} - ${reportId}`, margin, y);
       addFooter();
 
-      // Save
       doc.save(`EDL_${edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_') || 'rapport'}_${reportId}.pdf`);
-      showNotif('PDF téléchargé !');
+      showNotif('PDF telecharge !');
     } catch (e) {
       console.error('PDF Error:', e);
-      showNotif('Erreur génération PDF: ' + e.message, 'error');
+      showNotif('Erreur generation PDF: ' + e.message, 'error');
     }
     setGenerating(false);
   };
 
   const shareWhatsApp = () => {
-    const text = encodeURIComponent(`État des lieux - ${edl.adresse}\nType: ${edl.type_edl}\nLocataire: ${edl.nom_locataire}\nPropriétaire: ${edl.nom_proprietaire}\nDate: ${new Date().toLocaleDateString('fr-FR')}`);
+    const text = encodeURIComponent(`Etat des lieux - ${edl.adresse}\nType: ${edl.type_edl}\nLocataire: ${edl.nom_locataire}\nProprietaire: ${edl.nom_proprietaire}\nDate: ${new Date().toLocaleDateString('fr-FR')}`);
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   const sendEmail = () => {
-    // MOCK - Replace with EmailJS
     showNotif('Envoi par email (MOCK) - Configurez EmailJS pour activer', 'error');
   };
+
+  // Invoices view
+  if (showInvoices) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">🧾 Mes Factures</h2>
+          <button onClick={() => setShowInvoices(false)} className="text-sm text-[#2d6ac4] font-medium">← Retour</button>
+        </div>
+        {invoices.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+            <div className="text-4xl mb-3">🧾</div>
+            <p className="text-gray-400 text-sm">Aucune facture pour le moment</p>
+          </div>
+        ) : (
+          invoices.map(inv => (
+            <div key={inv.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-[#1e3a5f] text-sm">{inv.plan}</span>
+                <span className="bg-[#e6f7ef] text-[#27a96c] text-xs font-bold px-2 py-1 rounded-full">{inv.total?.toFixed(2)}€</span>
+              </div>
+              <p className="text-xs text-gray-500">{new Date(inv.created_at).toLocaleDateString('fr-FR')} • {inv.payment_id}</p>
+              {inv.addons?.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {inv.addons.map((a, i) => (
+                    <span key={i} className="text-[10px] bg-[#e8f0fb] text-[#2d6ac4] px-2 py-0.5 rounded-full">{a}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
       {/* Summary */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 className="text-lg font-bold text-[#1e3a5f] mb-4">📋 Récapitulatif</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">📋 Récapitulatif</h2>
+          <button onClick={() => setShowInvoices(true)} className="text-xs text-[#2d6ac4] font-medium border border-[#2d6ac4] px-3 py-1 rounded-full">🧾 Factures</button>
+        </div>
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Adresse</span>
-            <span className="font-medium text-[#1e3a5f]">{edl?.adresse}</span>
+            <span className="font-medium text-[#1e3a5f] text-right max-w-[200px] truncate">{edl?.adresse}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Type</span>
@@ -1252,52 +1259,184 @@ function ReportView({ edl, pieces, showNotif }) {
         </div>
       </div>
 
-      {/* Signature */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h3 className="font-bold text-[#1e3a5f] mb-3">✍️ Signature électronique</h3>
-        <div className="flex items-center gap-3 mb-3">
-          <input type="checkbox" checked={signed} onChange={e => setSigned(e.target.checked)}
-            className="w-5 h-5 rounded border-gray-300 text-[#2d6ac4]" />
-          <span className="text-sm text-gray-600">Je confirme l'exactitude des informations</span>
-        </div>
-        {signed && (
-          <input type="text" value={signName} onChange={e => setSignName(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
-            placeholder="Votre nom complet" />
-        )}
-      </div>
-
-      {/* Payment */}
+      {/* Blurred PDF Preview */}
       {!paid && (
-        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d6ac4] rounded-2xl p-5 text-white">
-          <h3 className="font-bold mb-2">💳 Paiement</h3>
-          <p className="text-sm text-white/80 mb-4">Générez votre rapport PDF professionnel pour seulement 4,99€</p>
-          <button onClick={handlePayment} disabled={paying}
-            className="w-full bg-white text-[#1e3a5f] font-bold py-3 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all">
-            {paying ? '⏳ Traitement...' : '💳 Payer 4,99€ (MOCK)'}
-          </button>
+        <div className="relative bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+          <div className="p-5 filter blur-[6px] select-none pointer-events-none">
+            <div className="bg-[#1e3a5f] text-white p-4 rounded-xl mb-3 text-center">
+              <div className="font-bold text-lg">État des Lieux</div>
+              <div className="text-sm opacity-80">{edl?.adresse}</div>
+            </div>
+            {completedPieces.slice(0, 3).map(p => (
+              <div key={p.id} className="border-b border-gray-100 py-2">
+                <div className="font-medium text-sm">{p.icon} {p.nom}</div>
+                <div className="text-xs text-gray-400">État : {p.donnees_json?.etat_general || 'Bon'}</div>
+              </div>
+            ))}
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-gray-200 h-16 rounded-lg" />
+              ))}
+            </div>
+          </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-sm">
+            <div className="text-4xl mb-2">🔒</div>
+            <p className="font-bold text-[#1e3a5f] text-sm">Rapport verrouillé</p>
+            <p className="text-xs text-gray-500">Choisissez une offre pour débloquer</p>
+          </div>
         </div>
       )}
 
-      {/* Actions after payment */}
-      {paid && (
+      {/* Pricing */}
+      {!paid && (
         <div className="space-y-3">
-          <button onClick={generatePDF} disabled={generating}
-            className="w-full bg-[#27a96c] text-white font-bold py-4 rounded-2xl hover:bg-[#1f9058] disabled:opacity-50 shadow-lg shadow-green-200 transition-all text-sm">
-            {generating ? '⏳ Génération en cours...' : '📥 Télécharger le PDF'}
-          </button>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={sendEmail}
-              className="bg-white border border-gray-200 text-gray-700 font-medium py-3 rounded-xl hover:bg-gray-50 text-sm transition-all">
-              📧 Email
-            </button>
-            <button onClick={shareWhatsApp}
-              className="bg-[#25d366] text-white font-medium py-3 rounded-xl hover:bg-[#1fb855] text-sm transition-all">
-              💬 WhatsApp
-            </button>
+          <h3 className="font-bold text-[#1e3a5f] text-sm">💳 Choisissez votre offre</h3>
+          <div className="space-y-3">
+            {plans.map(plan => (
+              <button key={plan.id} onClick={() => setSelectedPlan(plan.id)}
+                className={`w-full text-left p-4 rounded-2xl border-2 transition-all relative ${
+                  selectedPlan === plan.id
+                    ? 'border-[#2d6ac4] bg-[#e8f0fb] shadow-md'
+                    : 'border-gray-100 bg-white hover:border-gray-200'
+                }`}>
+                {plan.badge && (
+                  <span className="absolute -top-2 right-4 bg-[#2d6ac4] text-white text-[10px] font-bold px-3 py-0.5 rounded-full">
+                    {plan.badge}
+                  </span>
+                )}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-[#1e3a5f]">{plan.name}</div>
+                    <div className="text-xs text-gray-500 whitespace-pre-line mt-0.5">{plan.desc}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-[#2d6ac4]">{plan.price.toFixed(2)}€</div>
+                    <div className="text-[10px] text-gray-400">{plan.id === 'one_shot' ? '/dossier' : '/mois'}</div>
+                  </div>
+                </div>
+                {selectedPlan === plan.id && (
+                  <div className="absolute top-4 left-4 w-5 h-5 bg-[#2d6ac4] rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs">✓</span>
+                  </div>
+                )}
+              </button>
+            ))}
           </div>
         </div>
+      )}
+
+      {/* Add-ons */}
+      {!paid && (
+        <div className="space-y-3">
+          <h3 className="font-bold text-[#1e3a5f] text-sm">✨ Options supplémentaires</h3>
+
+          {/* Comparaison IA */}
+          <div className={`p-4 rounded-2xl border-2 transition-all ${addons.comparaison_ia ? 'border-[#27a96c] bg-[#e6f7ef]' : 'border-gray-100 bg-white'}`}>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={addons.comparaison_ia}
+                onChange={e => setAddons({...addons, comparaison_ia: e.target.checked})}
+                className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#27a96c]" />
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-[#1e3a5f] text-sm">🤖 Comparaison IA</span>
+                  <span className="font-bold text-[#27a96c]">+2,00€</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Compare les photos d'entrée et de sortie pour lister les différences automatiquement</p>
+              </div>
+            </label>
+          </div>
+
+          {/* Archive Sécurisée */}
+          <div className={`p-4 rounded-2xl border-2 transition-all ${addons.archive_securisee ? 'border-[#27a96c] bg-[#e6f7ef]' : 'border-gray-100 bg-white'}`}>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={addons.archive_securisee}
+                onChange={e => setAddons({...addons, archive_securisee: e.target.checked})}
+                className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#27a96c]" />
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-[#1e3a5f] text-sm">🔐 Archive 10 ans</span>
+                  <span className="font-bold text-[#27a96c]">{addons.archive_type === 'monthly' ? '+1€/mois' : '+10€'}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Stockage sécurisé des photos HD pendant 10 ans (durée légale)</p>
+                {addons.archive_securisee && (
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => setAddons({...addons, archive_type: 'one_time'})}
+                      className={`text-xs px-3 py-1 rounded-full font-medium ${addons.archive_type === 'one_time' ? 'bg-[#27a96c] text-white' : 'bg-gray-100 text-gray-600'}`}>
+                      10€ une fois
+                    </button>
+                    <button onClick={() => setAddons({...addons, archive_type: 'monthly'})}
+                      className={`text-xs px-3 py-1 rounded-full font-medium ${addons.archive_type === 'monthly' ? 'bg-[#27a96c] text-white' : 'bg-gray-100 text-gray-600'}`}>
+                      1€/mois
+                    </button>
+                  </div>
+                )}
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Total & Payment */}
+      {!paid && (
+        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d6ac4] rounded-2xl p-5 text-white">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-white/80 text-sm">{currentPlan.name}</span>
+            <span className="text-sm">{currentPlan.price.toFixed(2)}€</span>
+          </div>
+          {addonsTotal > 0 && (
+            <div className="flex justify-between items-center mb-3 text-sm">
+              <span className="text-white/80">Options</span>
+              <span>+{addonsTotal.toFixed(2)}€</span>
+            </div>
+          )}
+          <div className="border-t border-white/20 pt-3 mb-4 flex justify-between items-center">
+            <span className="font-bold text-lg">Total</span>
+            <span className="font-bold text-2xl">{totalPrice.toFixed(2)}€</span>
+          </div>
+          <button onClick={handlePayment} disabled={paying}
+            className="w-full bg-white text-[#1e3a5f] font-bold py-3.5 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all text-sm">
+            {paying ? '⏳ Traitement du paiement...' : `💳 Payer ${totalPrice.toFixed(2)}€`}
+          </button>
+          <p className="text-[10px] text-white/50 text-center mt-2">Paiement sécurisé • MOCK (Stripe bientôt)</p>
+        </div>
+      )}
+
+      {/* After payment */}
+      {paid && (
+        <>
+          {/* Signature */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <h3 className="font-bold text-[#1e3a5f] mb-3">✍️ Signature électronique</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <input type="checkbox" checked={signed} onChange={e => setSigned(e.target.checked)}
+                className="w-5 h-5 rounded border-gray-300 text-[#2d6ac4]" />
+              <span className="text-sm text-gray-600">Je confirme l'exactitude des informations</span>
+            </div>
+            {signed && (
+              <input type="text" value={signName} onChange={e => setSignName(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                placeholder="Votre nom complet" />
+            )}
+          </div>
+
+          {/* Download & Share */}
+          <div className="space-y-3">
+            <button onClick={generatePDF} disabled={generating}
+              className="w-full bg-[#27a96c] text-white font-bold py-4 rounded-2xl hover:bg-[#1f9058] disabled:opacity-50 shadow-lg shadow-green-200 transition-all text-sm">
+              {generating ? '⏳ Génération en cours...' : '📥 Télécharger le PDF'}
+            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={sendEmail}
+                className="bg-white border border-gray-200 text-gray-700 font-medium py-3 rounded-xl hover:bg-gray-50 text-sm transition-all">
+                📧 Email
+              </button>
+              <button onClick={shareWhatsApp}
+                className="bg-[#25d366] text-white font-medium py-3 rounded-xl hover:bg-[#1fb855] text-sm transition-all">
+                💬 WhatsApp
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

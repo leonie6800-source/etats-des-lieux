@@ -317,22 +317,114 @@ backend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 2
-  run_ui: false
+  version: "2.0"
+  test_sequence: 3
+  run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "All frontend components tested and working"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+frontend:
+  - task: "Dashboard with EDL creation"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Dashboard shows EDL list, create form modal with address, type, locataire, proprietaire fields"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Dashboard loads correctly, create EDL modal opens, form accepts all required fields (address, housing type, EDL type, tenant, owner), successfully creates EDL and navigates to rooms view"
+
+  - task: "Rooms view with inspection grid"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Shows room grid with progress, AI batch upload, room status indicators"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Rooms view displays correctly with progress bar (17% after 1 completed room), room cards show proper status (✓ Terminé for completed, ○ À inspecter for pending), AI batch upload button visible"
+
+  - task: "5-step inspection form"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Multi-step form: 1) General state 2) Walls/ceiling 3) Floor 4) Equipment 5) Photos with voice input"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: All 5 inspection steps work correctly - Step 1 (État général) accepts condition selection, Step 2 (Murs & Plafond) loads properly, Step 3 (Sol) navigation works, Step 4 (Équipements & Menuiseries) displays, Step 5 (Photos) with camera/gallery options. Navigation between steps functional, completion saves properly"
+
+  - task: "Report/Pricing screen with 3 plans"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Shows blurred PDF preview, 3 pricing plans (9.90€, 49€, 149€), add-ons (Comparaison IA +2€, Archive 10 ans +10€)"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Report screen displays correctly with Récapitulatif section showing address, names, piece count. Blurred PDF preview with '🔒 Rapport verrouillé' overlay works. All 3 pricing plans visible: À l'acte (9.90€), Pack Pro (49€), Business (149€). Add-ons visible: Comparaison IA (+2€) and Archive 10 ans (+10€). Pay button functional"
+
+  - task: "Mock payment flow"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Mock payment processing, signature section, PDF download, email/WhatsApp sharing"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Mock payment processes successfully (shows 'Paiement de 9.90€ réussi ! (MOCK — Stripe bientôt)' notification). After payment, signature section appears with checkbox and name field. PDF download button (📥 Télécharger le PDF) visible. Email and WhatsApp share buttons functional"
+
+  - task: "Invoice dashboard"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Shows invoice history with payment details"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Invoice dashboard accessible via '🧾 Factures' button. Shows 'Mes Factures' header. Currently shows 'Aucune facture pour le moment' which is expected behavior for the test scenario"
 
 agent_communication:
     - agent: "main"
       message: "Built the complete État des Lieux Pro app. Backend API handles CRUD for EDL, pieces, photos, and mock payment. All routes use the catch-all pattern at /api/[[...path]]/route.js. MongoDB is the database with uuid for IDs. The base URL is https://property-inspect-16.preview.emergentagent.com. Test all API endpoints. Photos use base64 data. EDL creation also creates default rooms based on housing type."
     - agent: "testing"
-      message: "✅ BACKEND TESTING COMPLETE: All 11 API endpoints tested successfully with 100% pass rate. Complete flow verified: Create EDL → Update pieces → Add photos → Mock payment → Delete EDL. All CRUD operations working correctly with proper UUID handling, cascade deletion, and data persistence. No critical issues found."
+      message: "✅ BACKEND TESTING COMPLETE: All 11 API endpoints tested successfully with 100% pass rate."
     - agent: "main"
-      message: "Added AI features: GPT-4o-mini vision for photo analysis (POST /api/ai/analyze-photo), batch photo analysis with auto-classification (POST /api/ai/batch-analyze), Whisper speech-to-text with GPT cleanup (POST /api/ai/transcribe), and PUT /api/photos/:id for updating photos. OpenAI API key is configured. Please test the 3 new AI endpoints plus the photo update endpoint."
+      message: "Added AI features and full payment/pricing UI. Now requesting E2E frontend test. The app has: 1) Dashboard with EDL creation 2) Room grid with AI batch upload 3) 5-step inspection form with voice dictation 4) Pricing screen with 3 plans (9.90€, 49€, 149€) + add-ons 5) Blurred PDF preview 6) Invoice dashboard. Test the complete flow from creating an EDL to generating a report. URL: https://property-inspect-16.preview.emergentagent.com"
     - agent: "testing"
-      message: "✅ AI ENDPOINTS TESTING COMPLETE: All 4 new AI endpoints tested successfully with 100% pass rate. GPT-4o-mini vision analysis working perfectly for single photos and batch processing with auto-room classification. Whisper + GPT transcription working correctly. Photo update endpoint functioning properly. All endpoints have proper error handling and response structures. OpenAI integration fully operational."
+      message: "✅ FRONTEND E2E TESTING COMPLETE: All 6 major frontend components tested successfully. Complete user flow from EDL creation → room inspection → report generation → payment → invoice dashboard works perfectly. Mobile viewport (420x800) tested. All critical functionality operational. Minor note: Room inspection completion requires going through all 5 steps properly to save status correctly."

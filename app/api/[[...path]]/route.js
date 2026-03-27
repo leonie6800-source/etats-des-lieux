@@ -136,6 +136,19 @@ export async function GET(request) {
       return NextResponse.json(photo, { headers: corsHeaders() });
     }
 
+    // GET /api/invoices
+    if (segments[0] === 'invoices' && !segments[1]) {
+      const invoices = await db.collection('invoices').find({}).sort({ created_at: -1 }).toArray();
+      return NextResponse.json(invoices, { headers: corsHeaders() });
+    }
+
+    // GET /api/invoices/:id
+    if (segments[0] === 'invoices' && segments[1]) {
+      const invoice = await db.collection('invoices').findOne({ id: segments[1] });
+      if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404, headers: corsHeaders() });
+      return NextResponse.json(invoice, { headers: corsHeaders() });
+    }
+
     return NextResponse.json({ error: 'Route not found' }, { status: 404, headers: corsHeaders() });
   } catch (error) {
     console.error('GET Error:', error);
@@ -223,13 +236,59 @@ export async function POST(request) {
 
     // POST /api/payment/mock
     if (segments[0] === 'payment') {
-      const edl_id = body.edl_id;
+      const { edl_id, plan, addons } = body;
       const paymentId = 'mock_pay_' + uuidv4().substring(0, 8);
+
+      // Calculate price based on plan and addons
+      let basePrice = 0;
+      let planName = '';
+      switch (plan) {
+        case 'one_shot': basePrice = 9.90; planName = 'À l\'acte'; break;
+        case 'pack_pro': basePrice = 49.00; planName = 'Pack Pro'; break;
+        case 'business': basePrice = 149.00; planName = 'Business'; break;
+        default: basePrice = 9.90; planName = 'À l\'acte';
+      }
+
+      let addonsTotal = 0;
+      const addonsList = [];
+      if (addons?.comparaison_ia) { addonsTotal += 2.00; addonsList.push('Comparaison IA (+2,00€)'); }
+      if (addons?.archive_securisee) {
+        if (addons.archive_type === 'monthly') { addonsTotal += 1.00; addonsList.push('Archive 10 ans (+1,00€/mois)'); }
+        else { addonsTotal += 10.00; addonsList.push('Archive 10 ans (+10,00€)'); }
+      }
+
+      const totalPrice = basePrice + addonsTotal;
+
       await db.collection('edl').updateOne(
         { id: edl_id },
-        { $set: { stripe_payment_id: paymentId, paid: true, statut: 'completed' } }
+        { $set: {
+          stripe_payment_id: paymentId, paid: true, statut: 'completed',
+          plan, addons: addons || {},
+          has_comparaison_ia: addons?.comparaison_ia || false,
+          has_archive: addons?.archive_securisee || false,
+        } }
       );
-      return NextResponse.json({ success: true, payment_id: paymentId }, { headers: corsHeaders() });
+
+      // Create invoice
+      const invoice = {
+        id: uuidv4(),
+        edl_id,
+        payment_id: paymentId,
+        plan: planName,
+        plan_code: plan || 'one_shot',
+        base_price: basePrice,
+        addons: addonsList,
+        addons_total: addonsTotal,
+        total: totalPrice,
+        status: 'paid',
+        created_at: new Date().toISOString(),
+      };
+      await db.collection('invoices').insertOne(invoice);
+
+      return NextResponse.json({
+        success: true, payment_id: paymentId,
+        invoice_id: invoice.id, total: totalPrice,
+      }, { headers: corsHeaders() });
     }
 
     // ==================== AI ENDPOINTS ====================
