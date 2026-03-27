@@ -149,6 +149,25 @@ export async function GET(request) {
       return NextResponse.json(invoice, { headers: corsHeaders() });
     }
 
+    // GET /api/report/:token - Public download link (no auth needed)
+    if (segments[0] === 'report' && segments[1]) {
+      const edl = await db.collection('edl').findOne({ download_token: segments[1] });
+      if (!edl) return NextResponse.json({ error: 'Lien invalide ou expiré' }, { status: 404, headers: corsHeaders() });
+      if (!edl.paid) return NextResponse.json({ error: 'Rapport non payé' }, { status: 403, headers: corsHeaders() });
+      const pieces = await db.collection('pieces').find({ edl_id: edl.id }).toArray();
+      const completedPieces = pieces.filter(p => p.statut === 'completed');
+      // Fetch photos for each piece
+      for (const piece of completedPieces) {
+        const photos = await db.collection('photos').find({ piece_id: piece.id }).toArray();
+        piece.photos = photos;
+      }
+      return NextResponse.json({
+        edl: { ...edl, download_token: undefined },
+        pieces: completedPieces,
+        generated_at: new Date().toISOString(),
+      }, { headers: corsHeaders() });
+    }
+
     return NextResponse.json({ error: 'Route not found' }, { status: 404, headers: corsHeaders() });
   } catch (error) {
     console.error('GET Error:', error);
@@ -238,6 +257,7 @@ export async function POST(request) {
     if (segments[0] === 'payment') {
       const { edl_id, plan, addons } = body;
       const paymentId = 'mock_pay_' + uuidv4().substring(0, 8);
+      const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
 
       // Calculate price based on plan and addons
       let basePrice = 0;
@@ -266,6 +286,7 @@ export async function POST(request) {
           plan, addons: addons || {},
           has_comparaison_ia: addons?.comparaison_ia || false,
           has_archive: addons?.archive_securisee || false,
+          download_token: downloadToken,
         } }
       );
 
@@ -288,6 +309,7 @@ export async function POST(request) {
       return NextResponse.json({
         success: true, payment_id: paymentId,
         invoice_id: invoice.id, total: totalPrice,
+        download_token: downloadToken,
       }, { headers: corsHeaders() });
     }
 

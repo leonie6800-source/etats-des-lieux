@@ -996,6 +996,7 @@ function ReportView({ edl, pieces, showNotif }) {
         body: JSON.stringify({ edl_id: edl.id, plan: selectedPlan, addons }),
       });
       setPaid(true);
+      if (result.download_token) setDownloadToken(result.download_token);
       showNotif(`Paiement de ${totalPrice.toFixed(2)}€ réussi ! (MOCK — Stripe bientôt)`);
     } catch (e) { showNotif(e.message, 'error'); }
     setPaying(false);
@@ -1183,6 +1184,7 @@ function ReportView({ edl, pieces, showNotif }) {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailTo, setEmailTo] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [downloadToken, setDownloadToken] = useState(edl?.download_token || null);
 
   const shareWhatsApp = () => {
     const text = encodeURIComponent(`Etat des lieux - ${edl.adresse}\nType: ${edl.type_edl}\nLocataire: ${edl.nom_locataire}\nProprietaire: ${edl.nom_proprietaire}\nDate: ${new Date().toLocaleDateString('fr-FR')}`);
@@ -1196,21 +1198,43 @@ function ReportView({ edl, pieces, showNotif }) {
     }
     setSendingEmail(true);
     try {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      const downloadLink = downloadToken ? `${baseUrl}/download/${downloadToken}` : '';
+
       emailjs.init(process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || '');
       const templateParams = {
         to_email: emailTo,
         from_name: 'État des Lieux Pro',
-        subject: `État des lieux - ${edl?.adresse || 'Rapport'}`,
-        message: `Bonjour,\n\nVeuillez trouver ci-joint le rapport d'état des lieux.\n\nAdresse : ${edl?.adresse || ''}\nType : ${edl?.type_logement || ''} — ${edl?.type_edl || ''}\nLocataire : ${edl?.nom_locataire || ''}\nPropriétaire : ${edl?.nom_proprietaire || ''}\nDate : ${new Date().toLocaleDateString('fr-FR')}\nPièces inspectées : ${completedPieces.length}\nPhotos : ${totalPhotos}\n\nCordialement,\nÉtat des Lieux Pro`,
+        subject: `Rapport d'état des lieux - ${edl?.adresse || 'Rapport'}`,
+        message: [
+          `Bonjour,`,
+          ``,
+          `Votre rapport d'état des lieux est prêt.`,
+          ``,
+          `Adresse : ${edl?.adresse || ''}`,
+          `Type : ${edl?.type_logement || ''} — ${edl?.type_edl || ''}`,
+          `Locataire : ${edl?.nom_locataire || ''}`,
+          `Propriétaire : ${edl?.nom_proprietaire || ''}`,
+          `Date : ${new Date().toLocaleDateString('fr-FR')}`,
+          `Pièces inspectées : ${completedPieces.length}`,
+          `Photos : ${totalPhotos}`,
+          ``,
+          downloadLink ? `Téléchargez votre rapport PDF ici :` : '',
+          downloadLink || '',
+          ``,
+          `Cordialement,`,
+          `État des Lieux Pro`,
+        ].filter(Boolean).join('\n'),
         to_name: edl?.nom_locataire || 'Destinataire',
         reply_to: emailTo,
+        download_link: downloadLink,
       };
       await emailjs.send(
         process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || '',
         process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || '',
         templateParams
       );
-      showNotif('Email envoyé avec succès !');
+      showNotif('Email envoyé avec le lien de téléchargement !');
       setShowEmailModal(false);
       setEmailTo('');
     } catch (e) {
