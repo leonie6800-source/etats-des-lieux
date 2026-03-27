@@ -18,6 +18,35 @@ const ROOM_ICONS = {
 
 const EQUIPMENT_CONDITIONS = ['Bon état', 'Correct', 'Usé', 'Dégradé', 'Absent'];
 
+// ==================== GPS HELPER ====================
+function getGPS() {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) }),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 5000 }
+    );
+  });
+}
+
+// ==================== COMPRESS FOR AI ====================
+function compressForAI(base64, maxWidth = 512) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, maxWidth / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.5));
+    };
+    img.src = base64;
+  });
+}
+
 // ==================== API HELPERS ====================
 async function api(path, options = {}) {
   const res = await fetch(`/api/${path}`, {
@@ -169,9 +198,12 @@ export default function App() {
   };
 
   // ---- Photo handling ----
-  const uploadPhoto = async (base64Data, legende = '') => {
+  const uploadPhoto = async (base64Data, legende = '', gpsData = null) => {
     if (!currentPiece || !currentEdl) return;
     try {
+      // Get GPS if not provided
+      const gps = gpsData || await getGPS();
+      
       await api('photos', {
         method: 'POST',
         body: JSON.stringify({
@@ -180,6 +212,7 @@ export default function App() {
           data: base64Data,
           legende,
           horodatage: new Date().toISOString(),
+          gps,
         }),
       });
       await fetchPhotos(currentPiece.id);
@@ -272,6 +305,7 @@ export default function App() {
             <RoomsView
               edl={currentEdl} pieces={pieces} goToInspection={goToInspection}
               goToReport={goToReport} addCustomRoom={addCustomRoom}
+              showNotif={showNotif} fetchPieces={() => fetchPieces(currentEdl?.id)}
             />
           )}
           {view === 'inspection' && (
@@ -422,7 +456,7 @@ function DashboardView({ edls, showCreate, setShowCreate, newEdl, setNewEdl, cre
 }
 
 // ==================== ROOMS VIEW ====================
-function RoomsView({ edl, pieces, goToInspection, goToReport, addCustomRoom }) {
+function RoomsView({ edl, pieces, goToInspection, goToReport, addCustomRoom, showNotif, fetchPieces }) {
   const [showAddRoom, setShowAddRoom] = useState(false);
   const [customName, setCustomName] = useState('');
 
@@ -446,6 +480,14 @@ function RoomsView({ edl, pieces, goToInspection, goToReport, addCustomRoom }) {
           <span>{edl?.type_edl === 'Entrée' ? "📥 Entrée" : "📤 Sortie"}</span>
         </div>
       </div>
+
+      {/* AI Batch Upload */}
+      <BatchUploader
+        edlId={edl?.id}
+        pieces={pieces}
+        showNotif={showNotif || (() => {})}
+        onComplete={() => { if (fetchPieces) fetchPieces(); }}
+      />
 
       {/* Room Grid */}
       <div className="grid grid-cols-2 gap-3 mb-5">
@@ -597,9 +639,12 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Observations générales</label>
-            <textarea value={localData.observations_generales || ''} onChange={e => update('observations_generales', e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-32"
-              placeholder="Décrivez l'état général de la pièce..." />
+            <VoiceInput
+              value={localData.observations_generales || ''}
+              onChange={v => update('observations_generales', v)}
+              placeholder="Décrivez l'état général de la pièce... ou utilisez le micro 🎙️"
+              rows={4}
+            />
           </div>
           <StepButtons step={step} onNext={() => saveInspection(localData, 2)} />
         </div>
@@ -635,9 +680,12 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
           <ConditionSelector label="État du plafond" value={localData.etat_plafond} onChange={v => update('etat_plafond', v)} />
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Observations</label>
-            <textarea value={localData.obs_murs || ''} onChange={e => update('obs_murs', e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-24"
-              placeholder="Observations sur les murs et plafond..." />
+            <VoiceInput
+              value={localData.obs_murs || ''}
+              onChange={v => update('obs_murs', v)}
+              placeholder="Observations sur les murs et plafond... ou utilisez le micro 🎙️"
+              rows={3}
+            />
           </div>
           <StepButtons step={step} onPrev={() => setStep(1)} onNext={() => saveInspection(localData, 3)} />
         </div>
@@ -661,9 +709,12 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
           <ConditionSelector label="État du sol" value={localData.etat_sol} onChange={v => update('etat_sol', v)} />
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Observations</label>
-            <textarea value={localData.obs_sol || ''} onChange={e => update('obs_sol', e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-24"
-              placeholder="Observations sur le sol..." />
+            <VoiceInput
+              value={localData.obs_sol || ''}
+              onChange={v => update('obs_sol', v)}
+              placeholder="Observations sur le sol... ou utilisez le micro 🎙️"
+              rows={3}
+            />
           </div>
           <StepButtons step={step} onPrev={() => setStep(2)} onNext={() => saveInspection(localData, 4)} />
         </div>
@@ -767,9 +818,12 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
 
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Observations</label>
-            <textarea value={localData.obs_equipements || ''} onChange={e => update('obs_equipements', e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none h-24"
-              placeholder="Observations sur les équipements..." />
+            <VoiceInput
+              value={localData.obs_equipements || ''}
+              onChange={v => update('obs_equipements', v)}
+              placeholder="Observations sur les équipements... ou utilisez le micro 🎙️"
+              rows={3}
+            />
           </div>
           <StepButtons step={step} onPrev={() => setStep(3)} onNext={() => saveInspection(localData, 5)} />
         </div>
@@ -805,8 +859,24 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
                     className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center shadow">
                     ✕
                   </button>
-                  <div className="p-2">
+                  {/* AI Badge */}
+                  {photo.ai_analysis && (
+                    <div className="absolute top-2 left-2">
+                      {photo.ai_analysis.verified ? (
+                        <span className="bg-[#27a96c] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow">✓ IA</span>
+                      ) : (
+                        <span className="bg-red-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow">⚠ IA</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="p-2 space-y-0.5">
                     <p className="text-[10px] text-gray-400">{new Date(photo.horodatage).toLocaleString('fr-FR')}</p>
+                    {photo.gps && (
+                      <p className="text-[9px] text-gray-300">📍 {photo.gps.lat}, {photo.gps.lng}</p>
+                    )}
+                    {photo.ai_analysis?.observations && (
+                      <p className="text-[9px] text-[#2d6ac4] truncate">🤖 {photo.ai_analysis.observations}</p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1033,25 +1103,73 @@ function ReportView({ edl, pieces, showNotif }) {
         if (data.etat_interrupteurs) doc.text(`Interrupteurs : ${data.etat_interrupteurs}`, margin, y), y += 6;
         if (data.has_radiateurs) doc.text(`Radiateurs : ${data.etat_radiateurs || ''}`, margin, y), y += 6;
 
-        // Photos
+        // Photos - Enhanced with AI badges, GPS, and table layout
         const piecePhotos = allPhotos[piece.id] || [];
         if (piecePhotos.length > 0) {
-          checkSpace(50);
+          checkSpace(15);
+          doc.setFillColor(232, 240, 251);
+          doc.rect(margin, y, contentWidth, 8, 'F');
           doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-          doc.text(`Photos (${piecePhotos.length})`, margin, y); y += 5;
+          doc.text(`Photos (${piecePhotos.length})`, margin + 2, y + 6); y += 12;
 
           for (const photo of piecePhotos) {
-            checkSpace(55);
+            checkSpace(60);
             try {
               if (photo.data && photo.data.startsWith('data:')) {
-                doc.addImage(photo.data, 'JPEG', margin, y, 50, 40);
-                if (photo.legende) {
-                  doc.setFontSize(8); doc.setTextColor(100);
-                  doc.text(photo.legende, margin + 55, y + 5);
+                // Photo in a bordered box
+                doc.setDrawColor(200);
+                doc.rect(margin, y, contentWidth, 52, 'S');
+
+                // Photo image
+                doc.addImage(photo.data, 'JPEG', margin + 2, y + 2, 48, 38);
+
+                // Info column next to photo
+                const infoX = margin + 54;
+
+                // AI Verification Badge
+                if (photo.ai_analysis) {
+                  if (photo.ai_analysis.verified) {
+                    doc.setFillColor(39, 169, 108);
+                    doc.roundedRect(infoX, y + 2, 35, 6, 1, 1, 'F');
+                    doc.setFontSize(7); doc.setTextColor(255);
+                    doc.text('Verifie par IA', infoX + 2, y + 6.5);
+                  } else {
+                    doc.setFillColor(220, 53, 69);
+                    doc.roundedRect(infoX, y + 2, 35, 6, 1, 1, 'F');
+                    doc.setFontSize(7); doc.setTextColor(255);
+                    doc.text('Defauts detectes (IA)', infoX + 2, y + 6.5);
+                  }
                 }
-                doc.setFontSize(7); doc.setTextColor(150);
-                doc.text(new Date(photo.horodatage).toLocaleString('fr-FR'), margin + 55, y + 12);
-                y += 45;
+
+                // Timestamp
+                doc.setFontSize(8); doc.setTextColor(100);
+                doc.text(`Date : ${new Date(photo.horodatage).toLocaleString('fr-FR')}`, infoX, y + 16);
+
+                // GPS coordinates
+                if (photo.gps) {
+                  doc.text(`GPS : ${photo.gps.lat}, ${photo.gps.lng}`, infoX, y + 22);
+                }
+
+                // AI observations
+                if (photo.ai_analysis?.observations) {
+                  doc.setFontSize(7); doc.setTextColor(45, 106, 196);
+                  const obsLines = doc.splitTextToSize(`IA : ${photo.ai_analysis.observations}`, contentWidth - 56);
+                  doc.text(obsLines.slice(0, 3), infoX, y + 30);
+                }
+
+                // AI condition rating
+                if (photo.ai_analysis?.etat_general) {
+                  doc.setFontSize(7); doc.setTextColor(100);
+                  doc.text(`Etat IA : ${photo.ai_analysis.etat_general}/5`, infoX, y + 44);
+                }
+
+                // Caption
+                if (photo.legende) {
+                  doc.setFontSize(7); doc.setTextColor(80);
+                  doc.text(photo.legende.substring(0, 60), margin + 2, y + 48);
+                }
+
+                y += 56;
               }
             } catch (e) { y += 5; }
           }
@@ -1179,6 +1297,294 @@ function ReportView({ edl, pieces, showNotif }) {
               💬 WhatsApp
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==================== VOICE INPUT COMPONENT ====================
+function VoiceInput({ value, onChange, placeholder, rows }) {
+  const [recording, setRecording] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        setProcessing(true);
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const result = await api('ai/transcribe', {
+              method: 'POST',
+              body: JSON.stringify({ audio_base64: reader.result, language: 'fr' }),
+            });
+            const newText = value ? value + ' ' + result.cleaned_text : result.cleaned_text;
+            onChange(newText);
+          } catch (e) {
+            console.error('Transcription error:', e);
+          }
+          setProcessing(false);
+        };
+        reader.readAsDataURL(blob);
+        streamRef.current?.getTracks().forEach(t => t.stop());
+      };
+
+      mediaRecorder.start();
+      setRecording(true);
+    } catch (e) {
+      console.error('Microphone error:', e);
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
+
+  return (
+    <div className="relative">
+      <textarea
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        className="w-full border border-gray-200 rounded-xl px-4 py-3 pr-14 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none resize-none"
+        placeholder={placeholder}
+        rows={rows || 3}
+      />
+      <button
+        type="button"
+        onClick={recording ? stopRecording : startRecording}
+        disabled={processing}
+        className={`absolute top-2 right-2 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${
+          recording
+            ? 'bg-red-500 text-white animate-pulse'
+            : processing
+            ? 'bg-yellow-400 text-white'
+            : 'bg-[#2d6ac4] text-white hover:bg-[#2560b5]'
+        }`}
+        title={recording ? 'Arrêter' : processing ? 'Transcription...' : 'Dictée vocale'}
+      >
+        {processing ? (
+          <span className="text-xs">⏳</span>
+        ) : recording ? (
+          <span className="text-sm">⏹</span>
+        ) : (
+          <span className="text-sm">🎙️</span>
+        )}
+      </button>
+      {recording && (
+        <div className="absolute -top-6 right-0 text-xs text-red-500 font-medium animate-pulse">
+          ● Enregistrement...
+        </div>
+      )}
+      {processing && (
+        <div className="absolute -top-6 right-0 text-xs text-yellow-600 font-medium">
+          🤖 Transcription IA...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== BATCH UPLOADER COMPONENT ====================
+function BatchUploader({ edlId, pieces, onComplete, showNotif }) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [results, setResults] = useState([]);
+  const [showResults, setShowResults] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const processAndUpload = async (files) => {
+    setUploading(true);
+    setProgress({ current: 0, total: files.length });
+    setResults([]);
+
+    const photosToAnalyze = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Process image: resize + timestamp
+      const base64Full = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxWidth = 1200;
+            const scale = Math.min(1, maxWidth / img.width);
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Timestamp
+            const now = new Date();
+            const ts = now.toLocaleDateString('fr-FR') + ' ' + now.toLocaleTimeString('fr-FR');
+            const fontSize = Math.max(14, canvas.width * 0.03);
+            ctx.font = `bold ${fontSize}px Arial`;
+            const tw = ctx.measureText(ts).width;
+            const pad = 8;
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(canvas.width - tw - pad * 3, canvas.height - fontSize - pad * 3, tw + pad * 2, fontSize + pad * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(ts, canvas.width - tw - pad * 2, canvas.height - pad * 2);
+
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // Compress for AI
+      const base64AI = await compressForAI(base64Full, 512);
+
+      // Get GPS
+      const gps = await getGPS();
+
+      photosToAnalyze.push({
+        data: base64Full,
+        data_ai: base64AI,
+        horodatage: new Date().toISOString(),
+        gps,
+      });
+
+      setProgress({ current: i + 1, total: files.length });
+    }
+
+    // Send batch to AI for analysis
+    showNotif(`🤖 Analyse IA de ${photosToAnalyze.length} photos...`);
+
+    try {
+      // Send compressed versions to AI
+      const aiPayload = photosToAnalyze.map(p => ({
+        data: p.data_ai,
+        horodatage: p.horodatage,
+        gps: p.gps,
+      }));
+
+      const response = await api('ai/batch-analyze', {
+        method: 'POST',
+        body: JSON.stringify({ photos: aiPayload, edl_id: edlId }),
+      });
+
+      // Now save the full-quality photos with AI analysis
+      // The batch-analyze endpoint already saves photos with AI data
+      // But we need to update with full-quality data
+      // Actually the batch endpoint saves with the compressed data, let me update each with full data
+      if (response.results) {
+        for (let i = 0; i < response.results.length; i++) {
+          if (response.results[i].id && photosToAnalyze[i]) {
+            // Update photo with full quality data and GPS
+            try {
+              await fetch(`/api/photos/${response.results[i].id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  data: photosToAnalyze[i].data,
+                  gps: photosToAnalyze[i].gps,
+                }),
+              });
+            } catch (e) { /* ignore update errors */ }
+          }
+        }
+      }
+
+      setResults(response.results || []);
+      setShowResults(true);
+      showNotif(`✅ ${response.results?.length || 0} photos classées par l'IA !`);
+    } catch (e) {
+      console.error('Batch analyze error:', e);
+      showNotif('Erreur analyse IA: ' + e.message, 'error');
+    }
+
+    setUploading(false);
+    if (onComplete) onComplete();
+  };
+
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) processAndUpload(files);
+    e.target.value = '';
+  };
+
+  const groupedResults = results.reduce((acc, r) => {
+    const key = r.piece_nom || 'Non classée';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(r);
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
+
+      {!showResults && (
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="w-full bg-gradient-to-r from-[#2d6ac4] to-[#1e3a5f] text-white font-semibold py-4 rounded-2xl hover:opacity-90 disabled:opacity-50 shadow-lg transition-all text-sm mb-4"
+        >
+          {uploading ? (
+            <span>🤖 Analyse IA... {progress.current}/{progress.total} photos</span>
+          ) : (
+            <span>🤖 Upload lot de photos (Tri IA automatique)</span>
+          )}
+        </button>
+      )}
+
+      {uploading && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+          <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <span>Traitement des photos...</span>
+            <span>{progress.current}/{progress.total}</span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-2">
+            <div className="h-2 rounded-full bg-[#2d6ac4] transition-all"
+              style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+      )}
+
+      {showResults && Object.keys(groupedResults).length > 0 && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-[#1e3a5f] text-sm">🤖 Résultats du tri IA</h3>
+            <button onClick={() => setShowResults(false)} className="text-xs text-gray-400">Fermer</button>
+          </div>
+          {Object.entries(groupedResults).map(([room, photos]) => (
+            <div key={room} className="bg-[#e8f0fb] rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-semibold text-[#1e3a5f] text-sm">{room}</span>
+                <span className="text-xs text-[#2d6ac4]">{photos.length} photo{photos.length > 1 ? 's' : ''}</span>
+              </div>
+              {photos.map((p, i) => (
+                <div key={i} className="text-xs text-gray-600 flex items-center gap-2 mt-1">
+                  {p.verified ? (
+                    <span className="bg-[#e6f7ef] text-[#27a96c] px-2 py-0.5 rounded-full font-medium">✓ Vérifié IA</span>
+                  ) : (
+                    <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">⚠ Défauts</span>
+                  )}
+                  <span className="truncate">{p.observations || 'RAS'}</span>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>

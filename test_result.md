@@ -255,6 +255,66 @@ backend:
           agent: "testing"
           comment: "✅ TESTED: EDL and all associated data deleted successfully. Verified cascade deletion of pieces and photos. Proper cleanup confirmed."
 
+  - task: "AI Photo Analysis (POST /api/ai/analyze-photo)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Uses GPT-4o-mini vision to analyze a photo. Body: {image_base64: 'data:image/jpeg;base64,...', available_pieces: ['Salon','Cuisine',...]}. Returns {success, analysis: {piece, objets_detectes, etat_general, observations, defauts_majeurs, verified}}. Uses OpenAI API key from env."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: AI photo analysis working perfectly. GPT-4o-mini correctly identified room as 'Salon', detected objects (window, table, chair, door), rated condition as 4/5, provided observations, and marked no major defects. Response structure validated with all required fields."
+
+  - task: "AI Batch Photo Analysis (POST /api/ai/batch-analyze)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Batch analyzes multiple photos with GPT-4o-mini vision and auto-classifies them to rooms. Body: {photos: [{data: 'base64', horodatage, gps}], edl_id: 'uuid'}. Creates photo records in DB with AI analysis. Needs valid edl_id with pieces."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Batch photo analysis working correctly. Successfully created EDL with 8 rooms, analyzed photo with AI, auto-classified to 'Salon' room, saved photo to database with AI analysis data. Response includes photo ID, detected piece, piece mapping, condition rating, and verification status."
+
+  - task: "AI Speech-to-Text (POST /api/ai/transcribe)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Uses Whisper for transcription + GPT-4o-mini for text cleanup. Body: {audio_base64: 'data:audio/webm;base64,...', language: 'fr'}. Returns {success, raw_text, cleaned_text}."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Speech-to-text transcription working. Whisper successfully transcribed test audio, GPT-4o-mini cleaned up the text (corrected 'para' to 'par'). Both raw_text and cleaned_text returned in response structure as expected."
+
+  - task: "Update Photo (PUT /api/photos/:id)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Updates photo data, GPS, AI analysis fields. Used by batch uploader to replace compressed data with full quality."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Photo update endpoint working correctly. Successfully created photo, then updated it with new image data and GPS coordinates (lat: 48.856614, lng: 2.352222). Update operation completed successfully with proper response."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
@@ -272,3 +332,7 @@ agent_communication:
       message: "Built the complete État des Lieux Pro app. Backend API handles CRUD for EDL, pieces, photos, and mock payment. All routes use the catch-all pattern at /api/[[...path]]/route.js. MongoDB is the database with uuid for IDs. The base URL is https://property-inspect-16.preview.emergentagent.com. Test all API endpoints. Photos use base64 data. EDL creation also creates default rooms based on housing type."
     - agent: "testing"
       message: "✅ BACKEND TESTING COMPLETE: All 11 API endpoints tested successfully with 100% pass rate. Complete flow verified: Create EDL → Update pieces → Add photos → Mock payment → Delete EDL. All CRUD operations working correctly with proper UUID handling, cascade deletion, and data persistence. No critical issues found."
+    - agent: "main"
+      message: "Added AI features: GPT-4o-mini vision for photo analysis (POST /api/ai/analyze-photo), batch photo analysis with auto-classification (POST /api/ai/batch-analyze), Whisper speech-to-text with GPT cleanup (POST /api/ai/transcribe), and PUT /api/photos/:id for updating photos. OpenAI API key is configured. Please test the 3 new AI endpoints plus the photo update endpoint."
+    - agent: "testing"
+      message: "✅ AI ENDPOINTS TESTING COMPLETE: All 4 new AI endpoints tested successfully with 100% pass rate. GPT-4o-mini vision analysis working perfectly for single photos and batch processing with auto-room classification. Whisper + GPT transcription working correctly. Photo update endpoint functioning properly. All endpoints have proper error handling and response structures. OpenAI integration fully operational."

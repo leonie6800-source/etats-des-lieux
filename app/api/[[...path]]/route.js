@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
+import OpenAI, { toFile } from 'openai';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const client = new MongoClient(process.env.MONGO_URL);
 const dbName = process.env.DB_NAME || 'edl_pro';
@@ -210,6 +213,8 @@ export async function POST(request) {
         data: body.data, // base64 string
         legende: body.legende || '',
         horodatage: body.horodatage || new Date().toISOString(),
+        gps: body.gps || null,
+        ai_analysis: body.ai_analysis || null,
         created_at: new Date().toISOString(),
       };
       await db.collection('photos').insertOne(photo);
@@ -225,6 +230,244 @@ export async function POST(request) {
         { $set: { stripe_payment_id: paymentId, paid: true, statut: 'completed' } }
       );
       return NextResponse.json({ success: true, payment_id: paymentId }, { headers: corsHeaders() });
+    }
+
+    // ==================== AI ENDPOINTS ====================
+
+    // POST /api/ai/analyze-photo - GPT-4o-mini Vision analysis
+    if (segments[0] === 'ai' && segments[1] === 'analyze-photo') {
+      const { image_base64, edl_id, available_pieces } = body;
+      if (!image_base64) {
+        return NextResponse.json({ error: 'image_base64 required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      // Strip data URL prefix if present for the API call
+      let base64ForApi = image_base64;
+      if (base64ForApi.startsWith('data:')) {
+        // Keep the full data URL for OpenAI API
+      }
+
+      const pieceNames = (available_pieces || []).join(', ');
+
+      try {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Tu es un expert en inspection immobilière. Tu analyses des photos de logements pour identifier la pièce et les éventuels défauts. Les pièces disponibles dans ce logement sont : ${pieceNames || 'Entrée, Salon, Cuisine, Chambre 1, Chambre 2, Salle de bain, WC, Couloir, Balcon, Cave, Garage'}. Réponds UNIQUEMENT en JSON valide.`
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Identifie la pièce de la maison sur cette photo. Si tu vois des défauts (taches, fissures, moisissures, dégradations), décris-les brièvement. Réponds UNIQUEMENT en format JSON avec les clés : "piece" (nom exact parmi la liste fournie), "objets_detectes" (liste d'objets/éléments visibles), "etat_general" (note de 1 à 5, où 5=parfait), "observations" (description brève des défauts ou de l'état), "defauts_majeurs" (true/false).`
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: base64ForApi,
+                    detail: 'low'
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 500,
+          temperature: 0.2,
+        });
+
+        const content = response.choices[0]?.message?.content || '{}';
+        // Parse JSON from response (handle markdown code blocks)
+        let parsed;
+        try {
+          const jsonMatch = content.match(/```json?\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
+          const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
+          parsed = JSON.parse(jsonStr);
+        } catch {
+          parsed = { piece: 'Inconnu', objets_detectes: [], etat_general: 3, observations: content, defauts_majeurs: false };
+        }
+
+        return NextResponse.json({
+          success: true,
+          analysis: {
+            piece: parsed.piece || 'Inconnu',
+            objets_detectes: parsed.objets_detectes || [],
+            etat_general: parsed.etat_general || 3,
+            observations: parsed.observations || '',
+            defauts_majeurs: parsed.defauts_majeurs || false,
+            verified: !(parsed.defauts_majeurs),
+          }
+        }, { headers: corsHeaders() });
+
+      } catch (aiError) {
+        console.error('AI Analyze Error:', aiError);
+        return NextResponse.json({ error: 'Erreur analyse IA: ' + aiError.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
+    // POST /api/ai/batch-analyze - Batch analyze photos and auto-classify
+    if (segments[0] === 'ai' && segments[1] === 'batch-analyze') {
+      const { photos: photosList, edl_id } = body;
+      if (!photosList || !Array.isArray(photosList) || photosList.length === 0) {
+        return NextResponse.json({ error: 'photos array required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      // Get available pieces for this EDL
+      const pieces = await db.collection('pieces').find({ edl_id }).toArray();
+      const pieceNames = pieces.map(p => p.nom);
+
+      const results = [];
+      for (const photoData of photosList) {
+        try {
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Tu es un expert en inspection immobilière. Les pièces de ce logement sont : ${pieceNames.join(', ')}. Réponds UNIQUEMENT en JSON valide.`
+              },
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: `Identifie la pièce sur cette photo parmi : ${pieceNames.join(', ')}. Détecte les défauts. Réponds en JSON : {"piece": "nom_exact", "objets_detectes": [], "etat_general": 1-5, "observations": "...", "defauts_majeurs": true/false}`
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: { url: photoData.data, detail: 'low' }
+                  }
+                ]
+              }
+            ],
+            max_tokens: 400,
+            temperature: 0.2,
+          });
+
+          const content = response.choices[0]?.message?.content || '{}';
+          let parsed;
+          try {
+            const jsonMatch = content.match(/```json?\s*([\s\S]*?)\s*```/) || content.match(/\{[\s\S]*\}/);
+            const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
+            parsed = JSON.parse(jsonStr);
+          } catch {
+            parsed = { piece: pieceNames[0] || 'Inconnu', etat_general: 3, observations: '', defauts_majeurs: false };
+          }
+
+          // Find matching piece
+          const matchedPiece = pieces.find(p =>
+            p.nom.toLowerCase() === (parsed.piece || '').toLowerCase()
+          ) || pieces.find(p =>
+            (parsed.piece || '').toLowerCase().includes(p.nom.toLowerCase()) ||
+            p.nom.toLowerCase().includes((parsed.piece || '').toLowerCase())
+          );
+
+          // Save photo with AI data
+          const photo = {
+            id: uuidv4(),
+            piece_id: matchedPiece ? matchedPiece.id : null,
+            edl_id,
+            data: photoData.data,
+            legende: parsed.observations || '',
+            horodatage: photoData.horodatage || new Date().toISOString(),
+            gps: photoData.gps || null,
+            ai_analysis: {
+              piece: parsed.piece || 'Inconnu',
+              objets_detectes: parsed.objets_detectes || [],
+              etat_general: parsed.etat_general || 3,
+              observations: parsed.observations || '',
+              defauts_majeurs: parsed.defauts_majeurs || false,
+              verified: !(parsed.defauts_majeurs),
+            },
+            created_at: new Date().toISOString(),
+          };
+          await db.collection('photos').insertOne(photo);
+
+          results.push({
+            id: photo.id,
+            piece_detected: parsed.piece,
+            piece_id: matchedPiece?.id || null,
+            piece_nom: matchedPiece?.nom || 'Non classée',
+            etat_general: parsed.etat_general,
+            observations: parsed.observations,
+            defauts_majeurs: parsed.defauts_majeurs,
+            verified: !(parsed.defauts_majeurs),
+          });
+        } catch (aiErr) {
+          console.error('Batch AI Error for photo:', aiErr.message);
+          results.push({ error: aiErr.message });
+        }
+      }
+
+      return NextResponse.json({ success: true, results, total: results.length }, { headers: corsHeaders() });
+    }
+
+    // POST /api/ai/transcribe - Whisper transcription + GPT cleanup
+    if (segments[0] === 'ai' && segments[1] === 'transcribe') {
+      const { audio_base64, language } = body;
+      if (!audio_base64) {
+        return NextResponse.json({ error: 'audio_base64 required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      try {
+        // Decode base64 audio
+        let audioData = audio_base64;
+        let mimeType = 'audio/webm';
+        if (audioData.startsWith('data:')) {
+          const match = audioData.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            mimeType = match[1];
+            audioData = match[2];
+          }
+        }
+        const buffer = Buffer.from(audioData, 'base64');
+
+        // Determine file extension
+        const extMap = { 'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/ogg': 'ogg' };
+        const ext = extMap[mimeType] || 'webm';
+
+        // Transcribe with Whisper
+        const file = await toFile(buffer, `audio.${ext}`, { type: mimeType });
+        const transcription = await openai.audio.transcriptions.create({
+          file,
+          model: 'whisper-1',
+          language: language || 'fr',
+          response_format: 'text',
+        });
+
+        const rawText = typeof transcription === 'string' ? transcription : transcription.text || '';
+
+        // Clean up with GPT-4o-mini
+        const cleanResponse = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'Tu es un assistant spécialisé en rédaction immobilière. Nettoie le texte transcrit : supprime les hésitations (euh, hmm), corrige la grammaire, utilise un vocabulaire immobilier professionnel. Garde le sens original. Réponds uniquement avec le texte nettoyé, sans guillemets ni explications.'
+            },
+            {
+              role: 'user',
+              content: `Nettoie cette transcription vocale pour un état des lieux immobilier :\n\n"${rawText}"`
+            }
+          ],
+          max_tokens: 500,
+          temperature: 0.3,
+        });
+
+        const cleanedText = cleanResponse.choices[0]?.message?.content || rawText;
+
+        return NextResponse.json({
+          success: true,
+          raw_text: rawText,
+          cleaned_text: cleanedText.trim(),
+        }, { headers: corsHeaders() });
+
+      } catch (transcribeError) {
+        console.error('Transcribe Error:', transcribeError);
+        return NextResponse.json({ error: 'Erreur transcription: ' + transcribeError.message }, { status: 500, headers: corsHeaders() });
+      }
     }
 
     return NextResponse.json({ error: 'Route not found' }, { status: 404, headers: corsHeaders() });
@@ -254,6 +497,13 @@ export async function PUT(request) {
       await db.collection('pieces').updateOne({ id: segments[1] }, { $set: updateData });
       const updated = await db.collection('pieces').findOne({ id: segments[1] });
       return NextResponse.json(updated, { headers: corsHeaders() });
+    }
+
+    // PUT /api/photos/:id
+    if (segments[0] === 'photos' && segments[1]) {
+      const { id, _id, ...updateData } = body;
+      await db.collection('photos').updateOne({ id: segments[1] }, { $set: updateData });
+      return NextResponse.json({ success: true }, { headers: corsHeaders() });
     }
 
     return NextResponse.json({ error: 'Route not found' }, { status: 404, headers: corsHeaders() });
