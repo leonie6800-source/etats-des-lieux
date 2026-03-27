@@ -266,7 +266,7 @@ export default function App() {
       const gps = gpsData || await getGPS();
       console.log('📸 Sending POST to /api/photos with piece_id:', currentPiece.id);
       
-      await api('photos', {
+      const response = await api('photos', {
         method: 'POST',
         body: JSON.stringify({
           piece_id: currentPiece.id,
@@ -277,7 +277,12 @@ export default function App() {
           gps,
         }),
       });
-      console.log('📸 Upload successful, fetching photos for piece:', currentPiece.id);
+      console.log('📸 Upload successful, response:', response);
+      
+      // Small delay to ensure DB has written
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('📸 Now fetching photos for piece:', currentPiece.id);
       await fetchPhotos(currentPiece.id);
       showNotif('Photo ajoutée !');
     } catch (e) { 
