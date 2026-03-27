@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import emailjs from '@emailjs/browser';
 
 // ==================== CONSTANTS ====================
 const HOUSING_TYPES = ['Studio', 'T1', 'T2', 'T3', 'T4', 'Maison'];
@@ -1179,13 +1180,44 @@ function ReportView({ edl, pieces, showNotif }) {
     setGenerating(false);
   };
 
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+
   const shareWhatsApp = () => {
     const text = encodeURIComponent(`Etat des lieux - ${edl.adresse}\nType: ${edl.type_edl}\nLocataire: ${edl.nom_locataire}\nProprietaire: ${edl.nom_proprietaire}\nDate: ${new Date().toLocaleDateString('fr-FR')}`);
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
-  const sendEmail = () => {
-    showNotif('Envoi par email (MOCK) - Configurez EmailJS pour activer', 'error');
+  const sendEmail = async () => {
+    if (!emailTo || !emailTo.includes('@')) {
+      showNotif('Veuillez entrer un email valide', 'error');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      emailjs.init(process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || '');
+      const templateParams = {
+        to_email: emailTo,
+        from_name: 'État des Lieux Pro',
+        subject: `État des lieux - ${edl?.adresse || 'Rapport'}`,
+        message: `Bonjour,\n\nVeuillez trouver ci-joint le rapport d'état des lieux.\n\nAdresse : ${edl?.adresse || ''}\nType : ${edl?.type_logement || ''} — ${edl?.type_edl || ''}\nLocataire : ${edl?.nom_locataire || ''}\nPropriétaire : ${edl?.nom_proprietaire || ''}\nDate : ${new Date().toLocaleDateString('fr-FR')}\nPièces inspectées : ${completedPieces.length}\nPhotos : ${totalPhotos}\n\nCordialement,\nÉtat des Lieux Pro`,
+        to_name: edl?.nom_locataire || 'Destinataire',
+        reply_to: emailTo,
+      };
+      await emailjs.send(
+        process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || '',
+        process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || '',
+        templateParams
+      );
+      showNotif('Email envoyé avec succès !');
+      setShowEmailModal(false);
+      setEmailTo('');
+    } catch (e) {
+      console.error('EmailJS error:', e);
+      showNotif('Erreur envoi email: ' + (e?.text || e?.message || 'Erreur inconnue'), 'error');
+    }
+    setSendingEmail(false);
   };
 
   // Invoices view
@@ -1426,7 +1458,7 @@ function ReportView({ edl, pieces, showNotif }) {
               {generating ? '⏳ Génération en cours...' : '📥 Télécharger le PDF'}
             </button>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={sendEmail}
+              <button onClick={() => setShowEmailModal(true)}
                 className="bg-white border border-gray-200 text-gray-700 font-medium py-3 rounded-xl hover:bg-gray-50 text-sm transition-all">
                 📧 Email
               </button>
@@ -1436,6 +1468,29 @@ function ReportView({ edl, pieces, showNotif }) {
               </button>
             </div>
           </div>
+
+          {/* Email Modal */}
+          {showEmailModal && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowEmailModal(false)}>
+              <div className="bg-white w-full max-w-[480px] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
+                <h3 className="font-bold text-[#1e3a5f] text-lg">📧 Envoyer par email</h3>
+                <p className="text-sm text-gray-500">Le rapport sera envoyé à l'adresse indiquée</p>
+                <input type="email" value={emailTo} onChange={e => setEmailTo(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                  placeholder="exemple@email.com" />
+                <div className="flex gap-3">
+                  <button onClick={() => setShowEmailModal(false)}
+                    className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm">
+                    Annuler
+                  </button>
+                  <button onClick={sendEmail} disabled={sendingEmail}
+                    className="flex-1 py-3 rounded-xl bg-[#2d6ac4] text-white font-semibold text-sm disabled:opacity-50">
+                    {sendingEmail ? '⏳ Envoi...' : '📤 Envoyer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
