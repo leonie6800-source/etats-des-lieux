@@ -130,6 +130,7 @@ export default function DownloadPage({ params }) {
 
         // Photos with AI badges
         const photos = piece.photos || [];
+        console.log('🔍 Piece:', piece.nom, '- Photos count:', photos.length, '- Photos array:', photos);
         if (photos.length > 0) {
           checkSpace(15);
           doc.setFillColor(232, 240, 251);
