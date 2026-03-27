@@ -175,9 +175,14 @@ export default function App() {
 
   const fetchPhotos = useCallback(async (pieceId) => {
     try {
+      console.log('📸 fetchPhotos for piece:', pieceId);
       const data = await api(`photos?piece_id=${pieceId}`);
+      console.log('📸 Photos fetched:', data.length, 'photos');
+      console.log('📸 Photos data:', data);
       setPhotos(data);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('❌ fetchPhotos error:', e); 
+    }
   }, []);
 
   useEffect(() => { fetchEdls(); }, [fetchEdls]);
@@ -910,11 +915,12 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
 
           {/* Photo grid */}
+          {console.log('📸 Rendering photos, count:', photos.length, photos)}
           {photos.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               {photos.map(photo => (
                 <div key={photo.id} className="relative bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                  <img src={photo.url || photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" crossOrigin="anonymous" />
+                  <img src={photo.url || photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" crossOrigin="anonymous" onError={(e) => console.error('❌ Image load error:', photo.id, e)} onLoad={() => console.log('✅ Image loaded:', photo.id)} />
                   <button onClick={() => deletePhoto(photo.id)}
                     className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center shadow">
                     ✕
