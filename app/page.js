@@ -137,6 +137,10 @@ export default function App() {
             const edl = await api(`edl/${edlId}`);
             if (edl) {
               setCurrentEdl(edl);
+              // Update download token if available
+              if (result.download_token || edl.download_token) {
+                setDownloadToken(result.download_token || edl.download_token);
+              }
               const piecesData = await api(`pieces?edl_id=${edlId}`);
               setPieces(piecesData);
               setView('report');
@@ -1182,8 +1186,25 @@ function ReportView({ edl, pieces, showNotif }) {
           for (const photo of piecePhotos) {
             checkSpace(60);
             try {
-              const imageData = photo.url || photo.data;
-              if (imageData && (imageData.startsWith('http') || imageData.startsWith('data:'))) {
+              let imageData = photo.url || photo.data;
+              
+              // Convert Cloudinary URL to base64 for PDF
+              if (imageData && imageData.startsWith('http')) {
+                try {
+                  const response = await fetch(imageData);
+                  const blob = await response.blob();
+                  imageData = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                  });
+                } catch (err) {
+                  console.error('Error loading image from Cloudinary:', err);
+                  imageData = null;
+                }
+              }
+              
+              if (imageData && imageData.startsWith('data:')) {
                 doc.setDrawColor(200);
                 doc.rect(margin, y, contentWidth, 52, 'S');
                 doc.addImage(imageData, 'JPEG', margin + 2, y + 2, 48, 38);
