@@ -640,9 +640,13 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
   }, []);
 
   const handleFileSelect = async (e) => {
+    console.log('📸 handleFileSelect called', e.target.files);
     const files = Array.from(e.target.files || []);
+    console.log('📸 Files to process:', files.length);
     for (const file of files) {
+      console.log('📸 Processing file:', file.name);
       const base64 = await processImage(file);
+      console.log('📸 Image processed, uploading...');
       await uploadPhoto(base64);
     }
     e.target.value = '';
