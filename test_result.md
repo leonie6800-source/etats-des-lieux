@@ -315,6 +315,51 @@ backend:
           agent: "testing"
           comment: "✅ TESTED: Photo update endpoint working correctly. Successfully created photo, then updated it with new image data and GPS coordinates (lat: 48.856614, lng: 2.352222). Update operation completed successfully with proper response."
 
+  - task: "Cloudinary Photo Upload (POST /api/photos with Cloudinary)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Replaced base64 storage with Cloudinary. POST /api/photos uploads image to Cloudinary, saves secure_url and public_id to MongoDB. If Cloudinary upload fails, falls back to base64 storage. Credentials configured in .env (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Cloudinary photo upload working perfectly. Image uploaded to Cloudinary with proper URL format (https://res.cloudinary.com/dylbswptn/...), public_id contains edl_id and piece_id as expected. MongoDB stores url and public_id correctly with data field set to null (no base64 storage). Response excludes data field for security. Image accessible on Cloudinary."
+
+  - task: "Cloudinary Photo Delete (DELETE /api/photos/:id with Cloudinary)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "DELETE /api/photos/:id now fetches photo from DB, deletes from Cloudinary using public_id, then deletes from MongoDB. This prevents storage leaks on Cloudinary."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Cloudinary photo deletion working correctly. Photo deleted from MongoDB immediately (404 response confirmed). Cloudinary deletion confirmed after 3-4 seconds (CDN caching delay is normal). No storage leaks - both MongoDB and Cloudinary cleanup successful."
+
+  - task: "Cloudinary Bulk Delete (DELETE /api/edl/:id with Cloudinary cleanup)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "DELETE /api/edl/:id now loops through all photos for that EDL, deletes each from Cloudinary using public_id, then deletes from MongoDB. Prevents orphaned images on Cloudinary."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Cloudinary bulk deletion working perfectly. Created EDL with 2 photos, verified both accessible on Cloudinary. EDL deletion triggered cascade cleanup: EDL deleted from MongoDB, all photos deleted from MongoDB, all images deleted from Cloudinary (confirmed after 1-4s delay). No orphaned images - complete cleanup successful."
+
 metadata:
   created_by: "main_agent"
   version: "2.0"
@@ -322,8 +367,7 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "All frontend components tested and working"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -428,3 +472,7 @@ agent_communication:
       message: "Added AI features and full payment/pricing UI. Now requesting E2E frontend test. The app has: 1) Dashboard with EDL creation 2) Room grid with AI batch upload 3) 5-step inspection form with voice dictation 4) Pricing screen with 3 plans (9.90€, 49€, 149€) + add-ons 5) Blurred PDF preview 6) Invoice dashboard. Test the complete flow from creating an EDL to generating a report. URL: https://property-inspect-16.preview.emergentagent.com"
     - agent: "testing"
       message: "✅ FRONTEND E2E TESTING COMPLETE: All 6 major frontend components tested successfully. Complete user flow from EDL creation → room inspection → report generation → payment → invoice dashboard works perfectly. Mobile viewport (420x800) tested. All critical functionality operational. Minor note: Room inspection completion requires going through all 5 steps properly to save status correctly."
+    - agent: "main"
+      message: "Integrated Cloudinary for HD photo storage to replace MongoDB base64 storage. Updated POST /api/photos to upload to Cloudinary and save secure_url + public_id. Fixed DELETE /api/photos/:id to delete from Cloudinary first then MongoDB. Fixed DELETE /api/edl/:id to loop through photos and delete each from Cloudinary. Cloudinary credentials are in .env. Need to test: 1) Photo upload creates Cloudinary URL and saves to DB 2) Photo delete removes from both Cloudinary and MongoDB 3) EDL delete removes all photos from Cloudinary. Test these 3 new Cloudinary integration tasks."
+    - agent: "testing"
+      message: "✅ CLOUDINARY INTEGRATION TESTING COMPLETE: All 3 Cloudinary tasks tested successfully with 100% pass rate. Photo upload correctly stores images on Cloudinary with proper URL format and saves url/public_id to MongoDB (no base64). Photo deletion removes from both Cloudinary and MongoDB with 3-4s CDN delay. EDL bulk deletion successfully removes all associated photos from both Cloudinary and MongoDB. No storage leaks detected. Integration working perfectly."

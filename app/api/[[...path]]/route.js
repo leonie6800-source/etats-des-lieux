@@ -3,9 +3,42 @@ import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import OpenAI, { toFile } from 'openai';
 import Stripe from 'stripe';
+import { v2 as cloudinary } from 'cloudinary';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
+
+// Upload base64 image to Cloudinary
+async function uploadToCloudinary(base64Data, folder = 'edl-pro') {
+  try {
+    const result = await cloudinary.uploader.upload(base64Data, {
+      folder,
+      resource_type: 'image',
+      quality: 'auto',
+      fetch_format: 'auto',
+    });
+    return { url: result.secure_url, public_id: result.public_id, width: result.width, height: result.height };
+  } catch (err) {
+    console.error('Cloudinary upload error:', err.message);
+    return null;
+  }
+}
+
+// Delete from Cloudinary
+async function deleteFromCloudinary(publicId) {
+  try {
+    await cloudinary.uploader.destroy(publicId, { invalidate: true });
+  } catch (err) {
+    console.error('Cloudinary delete error:', err.message);
+  }
+}
 
 // Fixed pricing (backend only - NEVER from frontend)
 const PLANS = {
@@ -252,15 +285,25 @@ export async function POST(request) {
 
     // POST /api/photos
     if (segments[0] === 'photos') {
+      const { piece_id, edl_id, data, legende, horodatage, gps, ai_analysis } = body;
+
+      // Upload to Cloudinary
+      let cloudinaryData = null;
+      if (data) {
+        cloudinaryData = await uploadToCloudinary(data, `edl-pro/${edl_id}/${piece_id}`);
+      }
+
       const photo = {
         id: uuidv4(),
-        piece_id: body.piece_id,
-        edl_id: body.edl_id,
-        data: body.data, // base64 string
-        legende: body.legende || '',
-        horodatage: body.horodatage || new Date().toISOString(),
-        gps: body.gps || null,
-        ai_analysis: body.ai_analysis || null,
+        piece_id,
+        edl_id,
+        url: cloudinaryData?.url || null,
+        public_id: cloudinaryData?.public_id || null,
+        data: cloudinaryData ? null : data, // fallback to base64 if Cloudinary fails
+        legende: legende || '',
+        horodatage: horodatage || new Date().toISOString(),
+        gps: gps || null,
+        ai_analysis: ai_analysis || null,
         created_at: new Date().toISOString(),
       };
       await db.collection('photos').insertOne(photo);
@@ -793,12 +836,23 @@ export async function DELETE(request) {
 
     // DELETE /api/photos/:id
     if (segments[0] === 'photos' && segments[1]) {
+      const photo = await db.collection('photos').findOne({ id: segments[1] });
+      if (photo?.public_id) {
+        await deleteFromCloudinary(photo.public_id);
+      }
       await db.collection('photos').deleteOne({ id: segments[1] });
       return NextResponse.json({ success: true }, { headers: corsHeaders() });
     }
 
     // DELETE /api/edl/:id
     if (segments[0] === 'edl' && segments[1]) {
+      // Delete all photos from Cloudinary first
+      const photos = await db.collection('photos').find({ edl_id: segments[1] }).toArray();
+      for (const photo of photos) {
+        if (photo.public_id) {
+          await deleteFromCloudinary(photo.public_id);
+        }
+      }
       await db.collection('photos').deleteMany({ edl_id: segments[1] });
       await db.collection('pieces').deleteMany({ edl_id: segments[1] });
       await db.collection('edl').deleteOne({ id: segments[1] });
