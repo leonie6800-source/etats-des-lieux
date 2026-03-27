@@ -900,7 +900,7 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
             <div className="grid grid-cols-2 gap-3">
               {photos.map(photo => (
                 <div key={photo.id} className="relative bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                  <img src={photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" />
+                  <img src={photo.url || photo.data} alt={photo.legende || 'Photo'} className="w-full h-32 object-cover" crossOrigin="anonymous" />
                   <button onClick={() => deletePhoto(photo.id)}
                     className="absolute top-2 right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center shadow">
                     ✕
@@ -1171,10 +1171,11 @@ function ReportView({ edl, pieces, showNotif }) {
           for (const photo of piecePhotos) {
             checkSpace(60);
             try {
-              if (photo.data && photo.data.startsWith('data:')) {
+              const imageData = photo.url || photo.data;
+              if (imageData && (imageData.startsWith('http') || imageData.startsWith('data:'))) {
                 doc.setDrawColor(200);
                 doc.rect(margin, y, contentWidth, 52, 'S');
-                doc.addImage(photo.data, 'JPEG', margin + 2, y + 2, 48, 38);
+                doc.addImage(imageData, 'JPEG', margin + 2, y + 2, 48, 38);
                 const infoX = margin + 54;
                 if (photo.ai_analysis) {
                   if (photo.ai_analysis.verified) {

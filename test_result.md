@@ -367,8 +367,10 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
-  stuck_tasks: []
+  current_focus:
+    - "Cloudinary Photo Display in Frontend"
+  stuck_tasks:
+    - "Cloudinary Photo Display in Frontend"
   test_all: false
   test_priority: "high_first"
 
@@ -463,6 +465,51 @@ frontend:
           agent: "testing"
           comment: "✅ TESTED: Invoice dashboard accessible via '🧾 Factures' button. Shows 'Mes Factures' header. Currently shows 'Aucune facture pour le moment' which is expected behavior for the test scenario"
 
+  - task: "Cloudinary Photo Display in Frontend"
+    implemented: true
+    working: false
+    file: "/app/app/page.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Line 903: Updated photo display to use photo.url || photo.data with crossOrigin='anonymous' for CORS handling. Photos should display from Cloudinary URLs without CORS errors."
+        - working: false
+          agent: "testing"
+          comment: "❌ TESTED: Created Cloudinary photo via API (URL: https://res.cloudinary.com/dylbswptn/...) but frontend Photos tab shows no images with crossOrigin attribute. The photo exists in database with url field but not displaying in UI. Frontend may not be fetching photos correctly or photo grid not rendering Cloudinary images."
+
+  - task: "PDF Generation with Cloudinary Images"
+    implemented: true
+    working: "NA"
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Lines 1174-1177: Updated PDF generation to support Cloudinary URLs. Uses photo.url || photo.data and checks for HTTP/HTTPS URLs. jsPDF should handle external image URLs for PDF generation."
+        - working: "NA"
+          agent: "testing"
+          comment: "⚠️ NOT TESTED: Could not test PDF generation because photos are not displaying in frontend. Need to fix photo display issue first before testing PDF generation with Cloudinary images."
+
+  - task: "Photo Upload with Cloudinary Integration"
+    implemented: true
+    working: true
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Frontend photo upload should work seamlessly with Cloudinary backend. Photos uploaded should display using Cloudinary URLs instead of base64 data."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Backend Cloudinary integration working perfectly. Created photo via API successfully uploads to Cloudinary (https://res.cloudinary.com/dylbswptn/...) and saves url/public_id to MongoDB with data=null. Issue is frontend not displaying these photos."
+
 agent_communication:
     - agent: "main"
       message: "Built the complete État des Lieux Pro app. Backend API handles CRUD for EDL, pieces, photos, and mock payment. All routes use the catch-all pattern at /api/[[...path]]/route.js. MongoDB is the database with uuid for IDs. The base URL is https://property-inspect-16.preview.emergentagent.com. Test all API endpoints. Photos use base64 data. EDL creation also creates default rooms based on housing type."
@@ -476,3 +523,9 @@ agent_communication:
       message: "Integrated Cloudinary for HD photo storage to replace MongoDB base64 storage. Updated POST /api/photos to upload to Cloudinary and save secure_url + public_id. Fixed DELETE /api/photos/:id to delete from Cloudinary first then MongoDB. Fixed DELETE /api/edl/:id to loop through photos and delete each from Cloudinary. Cloudinary credentials are in .env. Need to test: 1) Photo upload creates Cloudinary URL and saves to DB 2) Photo delete removes from both Cloudinary and MongoDB 3) EDL delete removes all photos from Cloudinary. Test these 3 new Cloudinary integration tasks."
     - agent: "testing"
       message: "✅ CLOUDINARY INTEGRATION TESTING COMPLETE: All 3 Cloudinary tasks tested successfully with 100% pass rate. Photo upload correctly stores images on Cloudinary with proper URL format and saves url/public_id to MongoDB (no base64). Photo deletion removes from both Cloudinary and MongoDB with 3-4s CDN delay. EDL bulk deletion successfully removes all associated photos from both Cloudinary and MongoDB. No storage leaks detected. Integration working perfectly."
+    - agent: "main"
+      message: "Updated frontend for Cloudinary integration: Line 903 - Photo display with photo.url || photo.data and crossOrigin='anonymous' for CORS. Lines 1174-1177 - PDF generation supports Cloudinary URLs. Need to test complete flow: Create EDL → Upload photo → Verify Cloudinary display → Generate PDF with images. Focus on CORS handling and external URL loading."
+    - agent: "testing"
+      message: "🔄 STARTING CLOUDINARY FRONTEND TESTING: Testing photo display from Cloudinary URLs, PDF generation with external images, and CORS handling. Will test complete user flow as specified in review request."
+    - agent: "testing"
+      message: "❌ CLOUDINARY FRONTEND ISSUE FOUND: Backend Cloudinary integration works perfectly (photos upload to Cloudinary with proper URLs), but frontend Photos tab shows no images. Created test photo via API with Cloudinary URL (https://res.cloudinary.com/dylbswptn/...) but frontend doesn't display it. Issue appears to be in photo fetching/rendering logic in frontend, not CORS. Need to debug why photos with url field aren't displaying in UI."
