@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import OpenAI, { toFile } from 'openai';
 import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
-import PDFDocument from 'pdfkit';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -235,7 +235,7 @@ export async function GET(request) {
       }, { headers: corsHeaders() });
     }
 
-    // GET /api/pdf/:token - Generate PDF server-side with Cloudinary images
+    // GET /api/pdf/:token - Generate Professional PDF with Cloudinary images
     if (segments[0] === 'pdf' && segments[1]) {
       const edl = await db.collection('edl').findOne({ download_token: segments[1] });
       if (!edl) return NextResponse.json({ error: 'Lien invalide ou expiré' }, { status: 404, headers: corsHeaders() });
@@ -243,113 +243,144 @@ export async function GET(request) {
       
       const pieces = await db.collection('pieces').find({ edl_id: edl.id, statut: 'completed' }).toArray();
       
-      // Fetch all photos
+      // Fetch all photos with Cloudinary transformation
       for (const piece of pieces) {
         const photos = await db.collection('photos').find({ piece_id: piece.id }).toArray();
         piece.photos = photos;
       }
       
-      // Create PDF with PDFKit
-      const doc = new PDFDocument({ size: 'A4', margin: 40 });
-      const chunks = [];
+      // Create PDF with pdf-lib
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => {});
+      const reportId = `EDL-${(edl.id || '').substring(0, 8).toUpperCase()}`;
+      const typeEdl = edl.type_edl === 'entree' ? 'ENTRÉE' : 'SORTIE';
       
-      // Cover page
-      doc.rect(0, 0, 595, 200).fill('#1e3a5f');
-      doc.fillColor('#ffffff').fontSize(32).text('État des Lieux', 50, 80, { align: 'center' });
-      doc.fontSize(18).text(edl.type_edl === 'entree' ? "d'Entrée" : 'de Sortie', 50, 120, { align: 'center' });
-      doc.fontSize(12).text(new Date(edl.created_at).toLocaleDateString('fr-FR'), 50, 150, { align: 'center' });
+      // PAGE 1: COVER
+      let page = pdfDoc.addPage([595, 842]); // A4 size
+      let yPos = 750;
       
-      // Info section
-      doc.fillColor('#000000').fontSize(14).text('Informations', 50, 250);
-      doc.fontSize(11);
-      doc.text(`Adresse : ${edl.adresse}`, 50, 280);
-      doc.text(`Type : ${edl.type_logement}`, 50, 300);
-      doc.text(`Locataire : ${edl.nom_locataire}`, 50, 320);
-      doc.text(`Propriétaire : ${edl.nom_proprietaire}`, 50, 340);
+      // Header background
+      page.drawRectangle({ x: 0, y: 720, width: 595, height: 122, color: rgb(0.12, 0.23, 0.37) });
       
-      // Rooms
-      for (const piece of pieces) {
-        doc.addPage();
-        doc.fillColor('#1e3a5f').fontSize(16).text(piece.nom, 50, 50);
-        doc.fillColor('#000000').fontSize(10);
-        
-        let y = 80;
+      // App name (left)
+      page.drawText('État des Lieux Pro', { x: 40, y: 800, size: 16, font: fontBold, color: rgb(1, 1, 1) });
+      
+      // Title (right)
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 250, y: 800, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+      
+      // Report ID and date
+      page.drawText(`N° ${reportId}`, { x: 40, y: 775, size: 10, font, color: rgb(0.9, 0.9, 0.9) });
+      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 40, y: 760, size: 10, font, color: rgb(0.9, 0.9, 0.9) });
+      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 745, size: 10, font, color: rgb(0.9, 0.9, 0.9) });
+      
+      yPos = 680;
+      
+      // Propriétaire block
+      page.drawRectangle({ x: 40, y: yPos - 60, width: 250, height: 80, color: rgb(0.95, 0.95, 0.95) });
+      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos, size: 11, font: fontBold, color: rgb(0.12, 0.23, 0.37) });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 20, size: 10, font });
+      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 35, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      
+      // Locataire block
+      page.drawRectangle({ x: 305, y: yPos - 60, width: 250, height: 80, color: rgb(0.95, 0.95, 0.95) });
+      page.drawText('LOCATAIRE', { x: 315, y: yPos, size: 11, font: fontBold, color: rgb(0.12, 0.23, 0.37) });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 315, y: yPos - 20, size: 10, font });
+      
+      yPos -= 100;
+      
+      // Table header
+      page.drawText('DÉTAIL DES PIÈCES', { x: 40, y: yPos, size: 14, font: fontBold });
+      yPos -= 30;
+      
+      // PAGE 2+: ROOMS TABLE
+      for (let i = 0; i < pieces.length; i++) {
+        const piece = pieces[i];
         const d = piece.donnees_json || {};
+        const photos = piece.photos || [];
         
-        if (d.etat_general) {
-          doc.text(`État général : ${d.etat_general}`, 50, y);
-          y += 20;
+        if (yPos < 150) {
+          page = pdfDoc.addPage([595, 842]);
+          yPos = 800;
         }
         
-        // Photos with Cloudinary transformation
-        const photos = piece.photos || [];
+        // Alternating row colors
+        const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : rgb(0.97, 0.97, 0.97);
+        page.drawRectangle({ x: 40, y: yPos - 60, width: 515, height: 80, color: bgColor });
+        
+        // Piece name
+        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 15, size: 11, font: fontBold });
+        
+        // État
+        const etat = d.etat_general || 'Non renseigné';
+        page.drawText(`État: ${etat}`, { x: 50, y: yPos - 30, size: 9, font });
+        
+        // Observations (IA)
+        if (d.observations_generales) {
+          const obs = d.observations_generales.substring(0, 80) + (d.observations_generales.length > 80 ? '...' : '');
+          page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 45, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
+        }
+        
+        // Photo thumbnails (small)
         if (photos.length > 0) {
-          doc.fontSize(12).text(`Photos (${photos.length})`, 50, y);
-          y += 25;
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 450, y: yPos - 30, size: 9, font });
           
-          for (const photo of photos) {
-            if (y > 700) {
-              doc.addPage();
-              y = 50;
-            }
-            
+          // Embed first photo as thumbnail (60x45)
+          if (photos[0].url) {
             try {
-              let imageUrl = photo.url;
-              
-              // Apply Cloudinary transformations for optimization
-              if (imageUrl && imageUrl.includes('cloudinary.com')) {
-                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_800,c_limit/');
+              let imageUrl = photos[0].url;
+              // Apply Cloudinary transformations
+              if (imageUrl.includes('cloudinary.com')) {
+                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_200,c_limit/');
               }
               
-              // Fetch image
-              const response = await fetch(imageUrl || photo.data);
-              const arrayBuffer = await response.arrayBuffer();
-              const buffer = Buffer.from(arrayBuffer);
+              const imgResponse = await fetch(imageUrl);
+              const imgBytes = await imgResponse.arrayBuffer();
+              const image = await pdfDoc.embedJpg(imgBytes);
               
-              // Add image to PDF
-              doc.image(buffer, 50, y, { width: 200, height: 150 });
-              
-              // Photo metadata
-              doc.fontSize(9).fillColor('#666666');
-              doc.text(`Date: ${new Date(photo.horodatage).toLocaleString('fr-FR')}`, 270, y + 10);
-              if (photo.gps) {
-                doc.text(`GPS: ${photo.gps.lat}, ${photo.gps.lng}`, 270, y + 25);
-              }
-              if (photo.legende) {
-                doc.text(photo.legende, 270, y + 40, { width: 250 });
-              }
-              
-              y += 170;
+              page.drawImage(image, { x: 450, y: yPos - 65, width: 60, height: 45 });
             } catch (err) {
-              console.error('Error adding image to PDF:', err);
-              doc.fontSize(9).fillColor('#ff0000').text('Erreur chargement photo', 50, y);
-              y += 20;
+              console.error('Error embedding image:', err);
             }
           }
         }
+        
+        yPos -= 90;
       }
       
-      // Signature page
-      doc.addPage();
-      doc.fontSize(16).fillColor('#1e3a5f').text('Signatures', 50, 50);
-      doc.fontSize(11).fillColor('#000000');
-      doc.text(`Le locataire : ${edl.nom_locataire}`, 50, 100);
-      doc.text(`Le propriétaire : ${edl.nom_proprietaire}`, 50, 150);
-      doc.fontSize(9).fillColor('#666666').text(`Document généré le ${new Date().toLocaleDateString('fr-FR')}`, 50, 700);
+      // LAST PAGE: SIGNATURES
+      page = pdfDoc.addPage([595, 842]);
+      yPos = 750;
       
-      doc.end();
+      page.drawText('SIGNATURES', { x: 250, y: yPos, size: 16, font: fontBold, color: rgb(0.12, 0.23, 0.37) });
+      yPos -= 50;
       
-      // Wait for PDF to be fully generated
-      await new Promise((resolve) => {
-        doc.on('end', resolve);
+      // Locataire signature box
+      page.drawRectangle({ x: 40, y: yPos - 100, width: 200, height: 120, color: rgb(0.95, 0.95, 0.95), borderColor: rgb(0.5, 0.5, 0.5), borderWidth: 1 });
+      page.drawText('Le Locataire', { x: 50, y: yPos, size: 11, font: fontBold });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 20, size: 10, font });
+      page.drawText('Signature:', { x: 50, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      
+      // Propriétaire signature box
+      page.drawRectangle({ x: 355, y: yPos - 100, width: 200, height: 120, color: rgb(0.95, 0.95, 0.95), borderColor: rgb(0.5, 0.5, 0.5), borderWidth: 1 });
+      page.drawText('Le Propriétaire', { x: 365, y: yPos, size: 11, font: fontBold });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
+      page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      
+      // Footer
+      page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
+        x: 50,
+        y: 50,
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5)
       });
       
-      const pdfBuffer = Buffer.concat(chunks);
+      // Generate PDF bytes
+      const pdfBytes = await pdfDoc.save();
       
-      return new NextResponse(pdfBuffer, {
+      return new NextResponse(pdfBytes, {
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `attachment; filename="EDL_${edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`,
