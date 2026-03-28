@@ -1118,198 +1118,25 @@ function ReportView({ edl, pieces, showNotif }) {
   const generatePDF = async () => {
     setGenerating(true);
     try {
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = 210;
-      const margin = 20;
-      const contentWidth = pageWidth - margin * 2;
-      let y = margin;
-      const reportId = 'EDL-' + (edl.id || '').substring(0, 8).toUpperCase();
-      const hasAICert = edl?.has_comparaison_ia || edl?.has_archive || addons.comparaison_ia || addons.archive_securisee;
-
-      const addPage = () => { doc.addPage(); y = margin; addFooter(); };
-      const checkSpace = (needed) => { if (y + needed > 270) addPage(); };
-      const addFooter = () => {
-        doc.setFontSize(8); doc.setTextColor(150);
-        doc.text(`${reportId} | ${new Date().toLocaleDateString('fr-FR')}`, margin, 290);
-        doc.text('Etat des Lieux Pro', pageWidth - margin, 290, { align: 'right' });
-        if (hasAICert) {
-          doc.setFillColor(39, 169, 108);
-          doc.roundedRect(pageWidth / 2 - 20, 286, 40, 6, 1, 1, 'F');
-          doc.setFontSize(6); doc.setTextColor(255);
-          doc.text('Certifie IA', pageWidth / 2, 290, { align: 'center' });
-        }
-      };
-
-      // ---- COVER PAGE ----
-      doc.setFillColor(30, 58, 95);
-      doc.rect(0, 0, pageWidth, 80, 'F');
-      doc.setTextColor(255);
-      doc.setFontSize(28);
-      doc.text('Etat des Lieux', pageWidth / 2, 35, { align: 'center' });
-      doc.setFontSize(14);
-      doc.text(edl.type_edl === 'Entrée' ? "d'Entree" : 'de Sortie', pageWidth / 2, 48, { align: 'center' });
-      doc.setFontSize(10);
-      doc.text(new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth / 2, 65, { align: 'center' });
-
-      // AI Certification badge on cover
-      if (hasAICert) {
-        doc.setFillColor(39, 169, 108);
-        doc.roundedRect(pageWidth / 2 - 25, 70, 50, 8, 2, 2, 'F');
-        doc.setFontSize(8); doc.setTextColor(255);
-        doc.text('Certifie par Intelligence Artificielle', pageWidth / 2, 75.5, { align: 'center' });
+      if (!downloadToken) {
+        showNotif('Token de téléchargement manquant', 'error');
+        setGenerating(false);
+        return;
       }
 
-      y = 100;
-      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
-      doc.text('Adresse du bien', margin, y); y += 7;
-      doc.setTextColor(80); doc.setFontSize(11);
-      doc.text(edl.adresse || '', margin, y); y += 12;
-      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
-      doc.text('Type de logement', margin, y); y += 7;
-      doc.setTextColor(80); doc.text(edl.type_logement || '', margin, y); y += 12;
-      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
-      doc.text('Locataire', margin, y); y += 7;
-      doc.setTextColor(80); doc.text(edl.nom_locataire || '', margin, y); y += 12;
-      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
-      doc.text('Proprietaire', margin, y); y += 7;
-      doc.setTextColor(80); doc.text(edl.nom_proprietaire || '', margin, y); y += 12;
-      doc.setTextColor(30, 58, 95); doc.setFontSize(12);
-      doc.text('Numero de rapport', margin, y); y += 7;
-      doc.setTextColor(80); doc.text(reportId, margin, y);
-      addFooter();
-
-      // ---- ROOM PAGES ----
-      for (const piece of completedPieces) {
-        addPage();
-        const data = piece.donnees_json || {};
-        doc.setFillColor(232, 240, 251);
-        doc.rect(margin, y, contentWidth, 12, 'F');
-        doc.setTextColor(30, 58, 95); doc.setFontSize(14);
-        doc.text(`${piece.icon || ''} ${piece.nom}`, margin + 4, y + 8);
-        y += 18;
-
-        if (data.etat_general) {
-          doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-          doc.text('Etat general : ', margin, y);
-          doc.setTextColor(80); doc.text(data.etat_general, margin + 30, y); y += 7;
-        }
-        if (data.observations_generales) {
-          doc.setTextColor(100); doc.setFontSize(9);
-          const lines = doc.splitTextToSize(`Observations : ${data.observations_generales}`, contentWidth);
-          doc.text(lines, margin, y); y += lines.length * 5 + 3;
-        }
-        checkSpace(30);
-        doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-        if (data.nature_murs) { doc.text(`Murs : ${data.nature_murs} - ${data.etat_murs || ''}`, margin, y); y += 6; }
-        if (data.nature_plafond) { doc.text(`Plafond : ${data.nature_plafond} - ${data.etat_plafond || ''}`, margin, y); y += 6; }
-        if (data.obs_murs) { doc.setTextColor(100); doc.setFontSize(9); const l = doc.splitTextToSize(data.obs_murs, contentWidth); doc.text(l, margin, y); y += l.length * 5 + 3; }
-        checkSpace(20);
-        doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-        if (data.nature_sol) { doc.text(`Sol : ${data.nature_sol} - ${data.etat_sol || ''}`, margin, y); y += 6; }
-        if (data.obs_sol) { doc.setTextColor(100); doc.setFontSize(9); const l = doc.splitTextToSize(data.obs_sol, contentWidth); doc.text(l, margin, y); y += l.length * 5 + 3; }
-        checkSpace(30);
-        doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-        if (data.nb_fenetres) { doc.text(`Fenetres : ${data.nb_fenetres} - ${data.etat_fenetres || ''}`, margin, y); y += 6; }
-        if (data.nb_portes) { doc.text(`Portes : ${data.nb_portes} - ${data.etat_portes || ''}`, margin, y); y += 6; }
-        if (data.has_volets) { doc.text(`Volets/Stores : ${data.etat_volets || ''}`, margin, y); y += 6; }
-        if (data.etat_prises) { doc.text(`Prises : ${data.etat_prises}`, margin, y); y += 6; }
-        if (data.etat_interrupteurs) { doc.text(`Interrupteurs : ${data.etat_interrupteurs}`, margin, y); y += 6; }
-        if (data.has_radiateurs) { doc.text(`Radiateurs : ${data.etat_radiateurs || ''}`, margin, y); y += 6; }
-
-        // Photos
-        const piecePhotos = allPhotos[piece.id] || [];
-        if (piecePhotos.length > 0) {
-          checkSpace(15);
-          doc.setFillColor(232, 240, 251);
-          doc.rect(margin, y, contentWidth, 8, 'F');
-          doc.setFontSize(10); doc.setTextColor(30, 58, 95);
-          doc.text(`Photos (${piecePhotos.length})`, margin + 2, y + 6); y += 12;
-
-          for (const photo of piecePhotos) {
-            checkSpace(60);
-            try {
-              let imageData = photo.url || photo.data;
-              
-              // Convert Cloudinary URL to base64 for PDF
-              if (imageData && imageData.startsWith('http')) {
-                try {
-                  const response = await fetch(imageData);
-                  const blob = await response.blob();
-                  imageData = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(blob);
-                  });
-                } catch (err) {
-                  console.error('Error loading image from Cloudinary:', err);
-                  imageData = null;
-                }
-              }
-              
-              if (imageData && imageData.startsWith('data:')) {
-                doc.setDrawColor(200);
-                doc.rect(margin, y, contentWidth, 52, 'S');
-                doc.addImage(imageData, 'JPEG', margin + 2, y + 2, 48, 38);
-                const infoX = margin + 54;
-                if (photo.ai_analysis) {
-                  if (photo.ai_analysis.verified) {
-                    doc.setFillColor(39, 169, 108);
-                    doc.roundedRect(infoX, y + 2, 35, 6, 1, 1, 'F');
-                    doc.setFontSize(7); doc.setTextColor(255);
-                    doc.text('Verifie par IA', infoX + 2, y + 6.5);
-                  } else {
-                    doc.setFillColor(220, 53, 69);
-                    doc.roundedRect(infoX, y + 2, 35, 6, 1, 1, 'F');
-                    doc.setFontSize(7); doc.setTextColor(255);
-                    doc.text('Defauts (IA)', infoX + 2, y + 6.5);
-                  }
-                }
-                doc.setFontSize(8); doc.setTextColor(100);
-                doc.text(`Date : ${new Date(photo.horodatage).toLocaleString('fr-FR')}`, infoX, y + 16);
-                if (photo.gps) { doc.text(`GPS : ${photo.gps.lat}, ${photo.gps.lng}`, infoX, y + 22); }
-                if (photo.ai_analysis?.observations) {
-                  doc.setFontSize(7); doc.setTextColor(45, 106, 196);
-                  const ol = doc.splitTextToSize(`IA : ${photo.ai_analysis.observations}`, contentWidth - 56);
-                  doc.text(ol.slice(0, 3), infoX, y + 30);
-                }
-                if (photo.ai_analysis?.etat_general) {
-                  doc.setFontSize(7); doc.setTextColor(100);
-                  doc.text(`Etat IA : ${photo.ai_analysis.etat_general}/5`, infoX, y + 44);
-                }
-                y += 56;
-              }
-            } catch (e) { y += 5; }
-          }
-        }
-      }
-
-      // Signature page
-      addPage();
-      doc.setFontSize(16); doc.setTextColor(30, 58, 95);
-      doc.text('Signatures', pageWidth / 2, y, { align: 'center' }); y += 15;
-      doc.setFontSize(10);
-      doc.text('Le locataire :', margin, y); y += 6;
-      doc.text(edl.nom_locataire || '', margin, y); y += 4;
-      if (signed && signName) {
-        doc.setFontSize(9); doc.setTextColor(39, 169, 108);
-        doc.text(`Signe electroniquement par ${signName}`, margin, y + 5);
-      }
-      y += 20;
-      doc.setTextColor(30, 58, 95); doc.setFontSize(10);
-      doc.text('Le proprietaire :', margin, y); y += 6;
-      doc.text(edl.nom_proprietaire || '', margin, y); y += 20;
-      doc.setFontSize(9); doc.setTextColor(100);
-      doc.text(`Document genere le ${new Date().toLocaleDateString('fr-FR')} - ${reportId}`, margin, y);
-      addFooter();
-
-      doc.save(`EDL_${edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_') || 'rapport'}_${reportId}.pdf`);
-      showNotif('PDF telecharge !');
+      // Use the NEW server-side PDF generation endpoint
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      const pdfUrl = `${baseUrl}/api/pdf-fresh/${downloadToken}`;
+      
+      // Open in new tab to download
+      window.open(pdfUrl, '_blank');
+      showNotif('📥 Téléchargement du PDF en cours...');
+      
+      setGenerating(false);
     } catch (e) {
-      console.error('PDF Error:', e);
-      showNotif('Erreur generation PDF: ' + e.message, 'error');
+      showNotif('Erreur génération PDF: ' + e.message, 'error');
+      setGenerating(false);
     }
-    setGenerating(false);
   };
 
   const [showEmailModal, setShowEmailModal] = useState(false);
