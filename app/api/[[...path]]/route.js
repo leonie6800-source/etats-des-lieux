@@ -251,8 +251,9 @@ export async function GET(request) {
       
       // Create PDF with pdf-lib
       const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+      const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
       
       const reportId = `EDL-${(edl.id || '').substring(0, 8).toUpperCase()}`;
       const typeEdl = edl.type_edl === 'entree' ? 'ENTRÉE' : 'SORTIE';
@@ -322,17 +323,17 @@ export async function GET(request) {
           page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 45, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
         }
         
-        // Photo thumbnails (small)
+        // Photo thumbnails (improved positioning)
         if (photos.length > 0) {
-          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 450, y: yPos - 30, size: 9, font });
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
           
-          // Embed first photo as thumbnail (60x45)
+          // Embed first photo as thumbnail (larger: 80x60)
           if (photos[0].url) {
             try {
               let imageUrl = photos[0].url;
               // Apply Cloudinary transformations
               if (imageUrl.includes('cloudinary.com')) {
-                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_200,c_limit/');
+                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_300,c_limit/');
               }
               
               console.log('🖼️  Fetching image:', imageUrl);
@@ -357,31 +358,35 @@ export async function GET(request) {
                 console.log('✅ Image embedded as PNG');
               }
               
-              const imgDims = image.scale(0.3);
+              // Draw image with better positioning (right-aligned, larger)
+              const imgWidth = 80;
+              const imgHeight = 60;
+              const imgX = 515 - imgWidth - 10; // Right-aligned with margin
+              const imgY = yPos - 70;
               
-              // Draw RED DEBUG BORDER first
-              page.drawRectangle({
-                x: 450,
-                y: yPos - 65,
-                width: 60,
-                height: 45,
-                borderColor: rgb(1, 0, 0),
-                borderWidth: 2
-              });
-              
-              // Draw image
+              // Draw image first (behind border)
               page.drawImage(image, {
-                x: 452,
-                y: yPos - 63,
-                width: 56,
-                height: 41
+                x: imgX,
+                y: imgY,
+                width: imgWidth,
+                height: imgHeight
               });
               
-              console.log('✅ Image drawn on page at x:450, y:', yPos - 65);
+              // Draw border over image
+              page.drawRectangle({
+                x: imgX,
+                y: imgY,
+                width: imgWidth,
+                height: imgHeight,
+                borderColor: rgb(0.7, 0.7, 0.7),
+                borderWidth: 1
+              });
+              
+              console.log('✅ Image drawn on page at x:', imgX, 'y:', imgY);
             } catch (err) {
               console.error('❌ Error embedding image:', err);
               // Draw red X to show error
-              page.drawText('X', { x: 470, y: yPos - 50, size: 20, font, color: rgb(1, 0, 0) });
+              page.drawText('Photo indisponible', { x: 420, y: yPos - 50, size: 8, font: fontItalic, color: rgb(0.7, 0, 0) });
             }
           }
         }
