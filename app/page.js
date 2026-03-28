@@ -1121,7 +1121,7 @@ function ReportView({ edl, pieces, showNotif }) {
     setGenerating(true);
     try {
       if (!downloadToken) {
-        showNotif('Token de téléchargement manquant', 'error');
+        showNotif('Veuillez d\'abord payer pour générer le PDF', 'error');
         setGenerating(false);
         return;
       }
@@ -1130,8 +1130,13 @@ function ReportView({ edl, pieces, showNotif }) {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       const pdfUrl = `${baseUrl}/api/pdf-fresh/${downloadToken}`;
       
-      // Open in new tab to download
-      window.open(pdfUrl, '_blank');
+      // On mobile, use location.href instead of window.open for better compatibility
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        window.location.href = pdfUrl;
+      } else {
+        window.open(pdfUrl, '_blank');
+      }
+      
       showNotif('📥 Téléchargement du PDF en cours...');
       
       setGenerating(false);
@@ -1156,10 +1161,14 @@ function ReportView({ edl, pieces, showNotif }) {
       showNotif('Veuillez entrer un email valide', 'error');
       return;
     }
+    if (!downloadToken) {
+      showNotif('Vous devez d\'abord payer pour envoyer le rapport', 'error');
+      return;
+    }
     setSendingEmail(true);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
-      const downloadLink = downloadToken ? `${baseUrl}/download/${downloadToken}` : '';
+      const downloadLink = `${baseUrl}/api/pdf-fresh/${downloadToken}`;
 
       emailjs.init(process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || '');
       const templateParams = {
@@ -1179,27 +1188,30 @@ function ReportView({ edl, pieces, showNotif }) {
           `Pièces inspectées : ${completedPieces.length}`,
           `Photos : ${totalPhotos}`,
           ``,
-          downloadLink ? `Téléchargez votre rapport PDF ici :` : '',
-          downloadLink || '',
+          `Téléchargez votre rapport PDF ici :`,
+          downloadLink,
           ``,
           `Cordialement,`,
           `État des Lieux Pro`,
-        ].filter(Boolean).join('\n'),
+        ].join('\n'),
         to_name: edl?.nom_locataire || 'Destinataire',
         reply_to: emailTo,
         download_link: downloadLink,
       };
+      
+      console.log('📧 Sending email to:', emailTo);
+      
       await emailjs.send(
         process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || '',
         process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || '',
         templateParams
       );
-      showNotif('Email envoyé avec le lien de téléchargement !');
+      showNotif('✅ Email envoyé avec succès !');
       setShowEmailModal(false);
       setEmailTo('');
     } catch (e) {
-      console.error('EmailJS error:', e);
-      showNotif('Erreur envoi email: ' + (e?.text || e?.message || 'Erreur inconnue'), 'error');
+      console.error('❌ EmailJS error:', e);
+      showNotif('Erreur envoi email: ' + (e?.text || e?.message || 'Vérifiez votre connexion'), 'error');
     }
     setSendingEmail(false);
   };
@@ -1514,9 +1526,28 @@ function VoiceInput({ value, onChange, placeholder, rows }) {
 
   const startRecording = async () => {
     try {
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showNotif('Microphone non supporté sur cet appareil', 'error');
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      
+      // Check if MediaRecorder is supported and get compatible mime type
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+          mimeType = 'audio/ogg';
+        } else {
+          mimeType = ''; // Use default
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -1526,7 +1557,7 @@ function VoiceInput({ value, onChange, placeholder, rows }) {
 
       mediaRecorder.onstop = async () => {
         setProcessing(true);
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
         const reader = new FileReader();
         reader.onloadend = async () => {
           try {
@@ -1536,8 +1567,10 @@ function VoiceInput({ value, onChange, placeholder, rows }) {
             });
             const newText = value ? value + ' ' + result.cleaned_text : result.cleaned_text;
             onChange(newText);
+            showNotif('✅ Transcription réussie !');
           } catch (e) {
             console.error('Transcription error:', e);
+            showNotif('Erreur de transcription', 'error');
           }
           setProcessing(false);
         };
@@ -1547,8 +1580,16 @@ function VoiceInput({ value, onChange, placeholder, rows }) {
 
       mediaRecorder.start();
       setRecording(true);
+      showNotif('🎤 Enregistrement en cours...');
     } catch (e) {
       console.error('Microphone error:', e);
+      if (e.name === 'NotAllowedError') {
+        showNotif('Accès au microphone refusé. Autorisez l\'accès dans les paramètres de votre navigateur.', 'error');
+      } else if (e.name === 'NotFoundError') {
+        showNotif('Aucun microphone trouvé sur cet appareil', 'error');
+      } else {
+        showNotif('Erreur microphone: ' + e.message, 'error');
+      }
     }
   };
 
