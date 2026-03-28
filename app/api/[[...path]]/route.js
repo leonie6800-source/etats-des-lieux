@@ -471,6 +471,235 @@ export async function GET(request) {
       });
     }
 
+    // GET /api/pdf-fresh/:token - FRESH PDF (no cache version)
+    if (segments[0] === 'pdf-fresh' && segments[1]) {
+      // Same code as pdf endpoint but with different route
+      const edl = await db.collection('edl').findOne({ download_token: segments[1] });
+      if (!edl) return NextResponse.json({ error: 'Lien invalide ou expiré' }, { status: 404, headers: corsHeaders() });
+      if (!edl.paid) return NextResponse.json({ error: 'Rapport non payé' }, { status: 403, headers: corsHeaders() });
+      
+      const pieces = await db.collection('pieces').find({ edl_id: edl.id, statut: 'completed' }).toArray();
+      
+      // Fetch all photos with Cloudinary transformation
+      for (const piece of pieces) {
+        const photos = await db.collection('photos').find({ piece_id: piece.id }).toArray();
+        piece.photos = photos;
+      }
+      
+      // Load logo
+      const logoPath = '/tmp/logo-edl-pro.png';
+      let logoImage = null;
+      try {
+        const fs = require('fs');
+        const logoBytes = fs.readFileSync(logoPath);
+        logoImage = await pdfDoc.embedPng(logoBytes);
+      } catch (err) {
+        console.error('Logo not found, continuing without it');
+      }
+      
+      // Create PDF with pdf-lib
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+      const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+      
+      const reportId = `EDL-${(edl.id || '').substring(0, 8).toUpperCase()}`;
+      const typeEdl = edl.type_edl === 'entree' ? 'ENTRÉE' : 'SORTIE';
+      
+      // Color palette
+      const colorPrimary = rgb(0.17, 0.24, 0.31); // #2C3E50
+      const colorBg = rgb(0.97, 0.98, 0.99); // #F8FAFC
+      const colorBorder = rgb(0.89, 0.91, 0.94); // #E2E8F0
+      
+      // PAGE 1: COVER
+      let page = pdfDoc.addPage([595, 842]); // A4 size
+      let yPos = 750;
+      
+      // WATERMARK (logo as watermark at 15% opacity in center)
+      if (logoImage) {
+        const watermarkSize = 250;
+        const watermarkX = (595 - watermarkSize) / 2;
+        const watermarkY = (842 - watermarkSize) / 2;
+        page.drawImage(logoImage, {
+          x: watermarkX,
+          y: watermarkY,
+          width: watermarkSize,
+          height: watermarkSize,
+          opacity: 0.08
+        });
+      }
+      
+      // HEADER with logo and title
+      if (logoImage) {
+        page.drawImage(logoImage, { x: 40, y: 780, width: 80, height: 80 });
+      }
+      
+      // Title (right side)
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 820, size: 24, font: fontBold, color: colorPrimary });
+      
+      // Header line separator
+      page.drawLine({ start: { x: 40, y: 770 }, end: { x: 555, y: 770 }, thickness: 2, color: colorPrimary });
+      
+      // Report ID and date
+      page.drawText(`N° ${reportId}`, { x: 40, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 728, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      
+      yPos = 690;
+      
+      // SECTION: Propriétaire (styled box)
+      page.drawRectangle({ x: 40, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 35, size: 10, font });
+      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 50, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      
+      // SECTION: Locataire (styled box)
+      page.drawRectangle({ x: 310, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 10, font });
+      
+      yPos -= 110;
+      
+      // SECTION HEADER: Détail des pièces
+      page.drawRectangle({ x: 40, y: yPos - 30, width: 515, height: 35, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 14, font: fontBold, color: colorPrimary });
+      yPos -= 50;
+      
+      // PAGE 2+: ROOMS TABLE
+      for (let i = 0; i < pieces.length; i++) {
+        const piece = pieces[i];
+        const d = piece.donnees_json || {};
+        const photos = piece.photos || [];
+        
+        if (yPos < 150) {
+          page = pdfDoc.addPage([595, 842]);
+          yPos = 800;
+        }
+        
+        // Alternating row colors with border
+        const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : colorBg;
+        page.drawRectangle({ x: 40, y: yPos - 85, width: 515, height: 95, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
+        
+        // Piece name with underline
+        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 20, size: 11, font: fontBold, color: colorPrimary });
+        page.drawLine({ start: { x: 50, y: yPos - 25 }, end: { x: 200, y: yPos - 25 }, thickness: 1, color: colorBorder });
+        
+        // État
+        const etat = d.etat_general || 'Non renseigné';
+        page.drawText(`État: ${etat}`, { x: 50, y: yPos - 40, size: 9, font });
+        
+        // Observations (IA)
+        if (d.observations_generales) {
+          const obs = d.observations_generales.substring(0, 80) + (d.observations_generales.length > 80 ? '...' : '');
+          page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 55, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
+        }
+        
+        // Photo thumbnails (improved positioning)
+        if (photos.length > 0) {
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
+          
+          // Embed first photo as thumbnail (larger: 80x60)
+          if (photos[0].url) {
+            try {
+              let imageUrl = photos[0].url;
+              // Apply Cloudinary transformations
+              if (imageUrl.includes('cloudinary.com')) {
+                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_300,c_limit/');
+              }
+              
+              const imgResponse = await fetch(imageUrl);
+              
+              if (!imgResponse.ok) {
+                throw new Error(`HTTP ${imgResponse.status}`);
+              }
+              
+              const imgBytes = await imgResponse.arrayBuffer();
+              
+              // Try to embed as JPG
+              let image;
+              try {
+                image = await pdfDoc.embedJpg(imgBytes);
+              } catch (jpgErr) {
+                image = await pdfDoc.embedPng(imgBytes);
+              }
+              
+              // Draw image with better positioning (right-aligned, larger)
+              const imgWidth = 80;
+              const imgHeight = 60;
+              const imgX = 515 - imgWidth - 10; // Right-aligned with margin
+              const imgY = yPos - 70;
+              
+              // Draw image first (behind border)
+              page.drawImage(image, {
+                x: imgX,
+                y: imgY,
+                width: imgWidth,
+                height: imgHeight
+              });
+              
+              // Draw border over image
+              page.drawRectangle({
+                x: imgX,
+                y: imgY,
+                width: imgWidth,
+                height: imgHeight,
+                borderColor: rgb(0.7, 0.7, 0.7),
+                borderWidth: 1
+              });
+            } catch (err) {
+              console.error('❌ Error embedding image:', err);
+              // Draw error text
+              page.drawText('Photo indisponible', { x: 420, y: yPos - 50, size: 8, font: fontItalic, color: rgb(0.7, 0, 0) });
+            }
+          }
+        }
+        
+        yPos -= 100;
+      }
+      
+      // LAST PAGE: SIGNATURES
+      page = pdfDoc.addPage([595, 842]);
+      yPos = 750;
+      
+      page.drawText('SIGNATURES', { x: 250, y: yPos, size: 16, font: fontBold, color: colorPrimary });
+      yPos -= 50;
+      
+      // Locataire signature box
+      page.drawRectangle({ x: 40, y: yPos - 100, width: 200, height: 120, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('Le Locataire', { x: 50, y: yPos, size: 11, font: fontBold });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 20, size: 10, font });
+      page.drawText('Signature:', { x: 50, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      
+      // Propriétaire signature box
+      page.drawRectangle({ x: 355, y: yPos - 100, width: 200, height: 120, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('Le Propriétaire', { x: 365, y: yPos, size: 11, font: fontBold });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
+      page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      
+      // Footer
+      page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
+        x: 50,
+        y: 50,
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5)
+      });
+      
+      // Generate PDF bytes
+      const pdfBytes = await pdfDoc.save();
+      
+      return new NextResponse(pdfBytes, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="EDL_FRESH_${Date.now()}.pdf"`,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '-1',
+          ...corsHeaders(),
+        },
+      });
+    }
+
     return NextResponse.json({ error: 'Route not found' }, { status: 404, headers: corsHeaders() });
   } catch (error) {
     console.error('GET Error:', error);
