@@ -343,7 +343,7 @@ export default function DownloadPage({ params }) {
                   <p className="font-bold text-[#27a96c]">PDF téléchargé !</p>
                   <p className="text-xs text-gray-500 mt-1">Vérifiez votre dossier Téléchargements</p>
                 </div>
-                <button onClick={() => { setDownloaded(false); generateAndDownloadPDF(); }}
+                <button onClick={() => { setDownloaded(false); generateAndDownloadPDFServer(); }}
                   className="w-full bg-[#2d6ac4] text-white font-semibold py-3 rounded-xl text-sm">
                   🔄 Télécharger à nouveau
                 </button>
