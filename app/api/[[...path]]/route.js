@@ -119,27 +119,6 @@ const ADDONS = {
   archive_monthly: { name: 'Archive Sécurisée 10 ans (mensuel)', price: 1.00, recurring: true },
 };
 
-// Get or create Stripe coupon
-async function getOrCreateStripeCoupon(code, percentOff) {
-  try {
-    // Try to retrieve existing coupon
-    const coupon = await stripe.coupons.retrieve(code);
-    return coupon.id;
-  } catch (err) {
-    // Coupon doesn't exist, create it
-    if (err.code === 'resource_missing') {
-      const newCoupon = await stripe.coupons.create({
-        id: code,
-        percent_off: percentOff,
-        duration: 'once',
-        name: `Code promo ${code} - ${percentOff}% OFF`,
-      });
-      return newCoupon.id;
-    }
-    throw err;
-  }
-}
-
 const client = new MongoClient(process.env.MONGO_URL);
 const dbName = process.env.DB_NAME || 'edl_pro';
 
@@ -1333,7 +1312,7 @@ export async function POST(request) {
 
     // POST /api/stripe/checkout - Create Stripe Checkout Session
     if (segments[0] === 'stripe' && segments[1] === 'checkout') {
-      const { plan_code, addons: selectedAddons, edl_id, origin_url, promo_code } = body;
+      const { plan_code, addons: selectedAddons, edl_id, origin_url } = body;
       
       if (!edl_id || !origin_url) {
         return NextResponse.json({ error: 'edl_id and origin_url required' }, { status: 400, headers: corsHeaders() });
@@ -1390,33 +1369,22 @@ export async function POST(request) {
       const cancelUrl = `${origin_url}/?payment_cancel=true&edl_id=${edl_id}`;
 
       try {
-        // Prepare session options
-        const sessionOptions = {
+        const session = await stripe.checkout.sessions.create({
           payment_method_types: ['card'],
           line_items: lineItems,
           mode: planDef.mode === 'subscription' ? 'subscription' : 'payment',
           success_url: successUrl,
           cancel_url: cancelUrl,
-          customer_email: customerEmail || undefined, // Auto-collect email if not provided
-          billing_address_collection: customerEmail ? undefined : 'auto', // Collect address only if no email
+          customer_email: customerEmail || undefined,
+          billing_address_collection: customerEmail ? undefined : 'auto',
           metadata: {
             edl_id,
             plan_code: plan_code || 'one_shot',
             has_comparaison_ia: String(hasComparaisonIA),
             has_archive: String(hasArchive),
             customer_email: customerEmail || '',
-            promo_code: promo_code || '',
           },
-        };
-
-        // Add promo code if provided (TEST100 = 100% discount)
-        if (promo_code === 'TEST100') {
-          sessionOptions.discounts = [{
-            coupon: await getOrCreateStripeCoupon('TEST100', 100),
-          }];
-        }
-
-        const session = await stripe.checkout.sessions.create(sessionOptions);
+        });
 
         // Create payment transaction record
         const transaction = {
@@ -1568,50 +1536,6 @@ export async function POST(request) {
       } catch (stripeErr) {
         console.error('Stripe Portal Error:', stripeErr);
         return NextResponse.json({ error: 'Erreur portail: ' + stripeErr.message }, { status: 500, headers: corsHeaders() });
-      }
-    }
-
-    // POST /api/test/unlock-report - TEST ONLY: Force unlock report (bypass Stripe)
-    if (segments[0] === 'test' && segments[1] === 'unlock-report') {
-      const { edl_id, email } = body;
-      
-      if (!edl_id) {
-        return NextResponse.json({ error: 'edl_id required' }, { status: 400, headers: corsHeaders() });
-      }
-
-      try {
-        const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
-        
-        // Update EDL
-        await db.collection('edl').updateOne(
-          { id: edl_id },
-          { $set: {
-            paid: true,
-            statut: 'completed',
-            stripe_payment_id: 'test_bypass_' + Date.now(),
-            plan: 'one_shot',
-            download_token: downloadToken,
-          } }
-        );
-
-        // Get updated EDL
-        const edl = await db.collection('edl').findOne({ id: edl_id });
-
-        // Send email if provided
-        if (email) {
-          await sendEmailViaEmailJS(email, edl, downloadToken);
-        }
-
-        return NextResponse.json({
-          success: true,
-          message: 'Rapport débloqué (mode test)',
-          download_token: downloadToken,
-          edl_id: edl_id,
-        }, { headers: corsHeaders() });
-
-      } catch (err) {
-        console.error('Test Unlock Error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
       }
     }
 
