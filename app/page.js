@@ -131,18 +131,22 @@ export default function App() {
             body: JSON.stringify({ session_id: sessionId }),
           });
 
-          if (result.payment_status === 'paid') {
+          console.log('Payment status result:', result);
+
+          // Check if payment is complete (paid, no_payment_required for $0, or download_token exists)
+          const isComplete = result.payment_status === 'paid' || 
+                           result.payment_status === 'no_payment_required' || 
+                           result.download_token;
+
+          if (isComplete) {
             showNotif('Paiement réussi ! Votre rapport est débloqué 🎉');
-            // Navigate to report view
-            const edl = await api(`edl/${edlId}`);
+            // Navigate to report view with fresh data (includes download_token)
+            const cacheBuster = Date.now();
+            const edl = await api(`edl/${edlId}?_t=${cacheBuster}`);
             if (edl) {
-              setCurrentEdl(edl);
-              // Update download token if available
-              if (result.download_token || edl.download_token) {
-                setDownloadToken(result.download_token || edl.download_token);
-              }
-              const piecesData = await api(`pieces?edl_id=${edlId}`);
-              setPieces(piecesData);
+              setCurrentEdl({...edl}); // Force new reference with download_token
+              const piecesData = await api(`pieces?edl_id=${edlId}&_t=${cacheBuster}`);
+              setPieces([...piecesData]);
               setView('report');
             }
           } else {
@@ -150,6 +154,7 @@ export default function App() {
           }
         } catch (e) {
           console.error('Payment poll error:', e);
+          showNotif('Erreur lors de la vérification du paiement', 'error');
         }
         window.history.replaceState({}, '', '/');
       };

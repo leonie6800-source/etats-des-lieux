@@ -24,7 +24,7 @@ async function sendEmailViaEmailJS(toEmail, edl, downloadToken) {
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  const downloadLink = downloadToken ? `${baseUrl}/download/${downloadToken}` : '';
+  const downloadLink = downloadToken ? `${baseUrl}/api/pdf-fresh/${downloadToken}` : '';
 
   const templateParams = {
     to_email: toEmail,
@@ -1456,8 +1456,14 @@ export async function POST(request) {
         const session = await stripe.checkout.sessions.retrieve(session_id);
         const transaction = await db.collection('payment_transactions').findOne({ session_id });
 
+        console.log(`🔍 Stripe Session Check: status=${session.status}, payment_status=${session.payment_status}, amount=${session.amount_total}`);
+
         // Only process if not already processed (idempotent)
-        if (session.payment_status === 'paid' && transaction && transaction.payment_status !== 'paid') {
+        // Note: For $0 payments with 100% coupon, payment_status might be 'no_payment_required' instead of 'paid'
+        const isPaymentComplete = (session.status === 'complete') || (session.payment_status === 'paid') || (session.payment_status === 'no_payment_required');
+        
+        if (isPaymentComplete && transaction && transaction.payment_status !== 'paid') {
+          console.log(`✅ Processing payment for session ${session_id}`);
           const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
           const metadata = session.metadata || {};
 
@@ -1516,7 +1522,7 @@ export async function POST(request) {
 
           return NextResponse.json({
             status: session.status,
-            payment_status: session.payment_status,
+            payment_status: isPaymentComplete ? 'paid' : session.payment_status, // Normalize to 'paid' for frontend
             amount_total: (session.amount_total || 0) / 100,
             currency: session.currency,
             download_token: downloadToken,
@@ -1530,7 +1536,7 @@ export async function POST(request) {
 
         return NextResponse.json({
           status: session.status,
-          payment_status: session.payment_status,
+          payment_status: edl?.download_token ? 'paid' : session.payment_status, // If has download_token, it's paid
           amount_total: (session.amount_total || 0) / 100,
           currency: session.currency,
           download_token: edl?.download_token || null,
