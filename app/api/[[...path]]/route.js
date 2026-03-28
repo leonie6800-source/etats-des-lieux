@@ -297,14 +297,14 @@ export async function GET(request) {
       // BANDEAU BLEU PLUS GROS en haut
       page.drawRectangle({ x: 0, y: 742, width: 595, height: 100, color: colorPrimary });
       
-      // LOGO GROS dans le bandeau bleu (left)
+      // LOGO TRÈS GROS dans le bandeau bleu (left)
       if (logoImage) {
-        page.drawImage(logoImage, { x: 20, y: 752, width: 80, height: 80 });
+        page.drawImage(logoImage, { x: 15, y: 747, width: 100, height: 100 });
         console.log('✅ Logo added to header');
       }
       
       // Title in bandeau (center-right) - PLUS GROS
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 800, size: 26, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 220, y: 800, size: 26, font: fontBold, color: rgb(1, 1, 1) });
       
       yPos = 710;
       
@@ -566,14 +566,14 @@ export async function GET(request) {
       // BANDEAU BLEU PLUS GROS en haut
       page.drawRectangle({ x: 0, y: 742, width: 595, height: 100, color: colorPrimary });
       
-      // LOGO GROS dans le bandeau bleu (left)
+      // LOGO TRÈS GROS dans le bandeau bleu (left)
       if (logoImage) {
-        page.drawImage(logoImage, { x: 20, y: 752, width: 80, height: 80 });
+        page.drawImage(logoImage, { x: 15, y: 747, width: 100, height: 100 });
         console.log('✅ Logo added to header');
       }
       
       // Title in bandeau (center-right) - PLUS GROS
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 800, size: 26, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 220, y: 800, size: 26, font: fontBold, color: rgb(1, 1, 1) });
       
       yPos = 710;
       
@@ -754,9 +754,9 @@ export async function GET(request) {
       page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
       page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
       
-      // BLOC DESIGN EN BAS À DROITE : Logo + Nom de l'application
-      const blockWidth = 250;
-      const blockHeight = 150;
+      // BLOC DESIGN RÉDUIT EN BAS À DROITE : Logo + Nom
+      const blockWidth = 180;
+      const blockHeight = 110;
       const blockX = 595 - blockWidth - 30; // En bas à droite avec marge
       const blockY = 40; // En bas de page
       
@@ -771,30 +771,30 @@ export async function GET(request) {
         borderWidth: 2 
       });
       
-      // Logo centré dans le bloc
+      // Logo réduit centré dans le bloc
       if (logoImage) {
         page.drawImage(logoImage, { 
-          x: blockX + (blockWidth - 80) / 2, 
-          y: blockY + 60, 
-          width: 80, 
-          height: 80 
+          x: blockX + (blockWidth - 60) / 2, 
+          y: blockY + 45, 
+          width: 60, 
+          height: 60 
         });
       }
       
       // Nom de l'application centré
       page.drawText('État des Lieux Pro', { 
-        x: blockX + 45, 
-        y: blockY + 40, 
-        size: 16, 
+        x: blockX + 22, 
+        y: blockY + 25, 
+        size: 14, 
         font: fontBold, 
         color: colorPrimary 
       });
       
-      // Tagline
-      page.drawText('Solution professionnelle certifiée', { 
-        x: blockX + 30, 
-        y: blockY + 20, 
-        size: 10, 
+      // Tagline réduite
+      page.drawText('Solution certifiée', { 
+        x: blockX + 42, 
+        y: blockY + 10, 
+        size: 9, 
         font: fontItalic, 
         color: rgb(0.5, 0.5, 0.5) 
       });
