@@ -191,9 +191,16 @@ export default function App() {
     const userData = localStorage.getItem('user_data');
     
     if (token && userData) {
-      const user = JSON.parse(userData);
-      setUserEmail(user.email);
-      fetchEdls();
+      try {
+        const user = JSON.parse(userData);
+        setUserEmail(user.email);
+        fetchEdls();
+      } catch (err) {
+        console.error('Error parsing user data:', err);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+        setShowEmailPrompt(true);
+      }
     } else {
       setShowEmailPrompt(true);
     }
@@ -421,8 +428,8 @@ export default function App() {
     <div className="min-h-screen bg-[#f4f6f9]">
       {/* Auth Modal (Login/Register) */}
       {showEmailPrompt && (
-        <div className="fixed inset-0 bg-gradient-to-br from-[#1e3a5f] to-[#2d6ac4] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 bg-gradient-to-br from-[#1e3a5f] to-[#2d6ac4] z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl my-8">
             <div className="text-center mb-6">
               <h1 className="text-3xl font-bold text-[#1e3a5f] mb-2">🏠 État des Lieux Pro</h1>
               <p className="text-gray-600 text-sm">
@@ -439,6 +446,7 @@ export default function App() {
                     name="nom"
                     placeholder="Jean Dupont"
                     required
+                    autoComplete="name"
                     className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
                   />
                 </div>
@@ -451,6 +459,7 @@ export default function App() {
                   name="email"
                   placeholder="vous@exemple.com"
                   required
+                  autoComplete="email"
                   autoFocus={authMode === 'login'}
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
                 />
@@ -464,6 +473,7 @@ export default function App() {
                   placeholder="••••••••"
                   required
                   minLength={6}
+                  autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
                 />
                 {authMode === 'register' && (
@@ -481,8 +491,9 @@ export default function App() {
 
             <div className="mt-6 text-center">
               <button
+                type="button"
                 onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-                className="text-sm text-[#2d6ac4] hover:underline">
+                className="text-sm text-[#2d6ac4] hover:underline font-medium">
                 {authMode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
               </button>
             </div>
