@@ -207,6 +207,35 @@ export default function DownloadPage({ params }) {
     setGenerating(false);
   };
 
+  // SERVER-SIDE PDF GENERATION (NEW)
+  const generateAndDownloadPDFServer = async () => {
+    if (!data) return;
+    setGenerating(true);
+    try {
+      const response = await fetch(`/api/pdf/${token}`);
+      
+      if (!response.ok) {
+        throw new Error('Erreur lors de la génération du PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `EDL_${data.edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      setDownloaded(true);
+    } catch (e) {
+      console.error('PDF Error:', e);
+      setError('Erreur lors de la génération du PDF: ' + e.message);
+    }
+    setGenerating(false);
+  };
+
   // LOADING
   if (loading) {
     return (
@@ -303,7 +332,7 @@ export default function DownloadPage({ params }) {
 
             {/* Download button */}
             {!downloaded ? (
-              <button onClick={generateAndDownloadPDF} disabled={generating}
+              <button onClick={generateAndDownloadPDFServer} disabled={generating}
                 className="w-full bg-[#27a96c] text-white font-bold py-4 rounded-2xl hover:bg-[#1f9058] disabled:opacity-50 shadow-lg shadow-green-200 transition-all">
                 {generating ? '⏳ Génération du PDF...' : '📥 Télécharger le rapport PDF'}
               </button>

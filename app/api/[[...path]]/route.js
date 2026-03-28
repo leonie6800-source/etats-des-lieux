@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import OpenAI, { toFile } from 'openai';
 import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
+import PDFDocument from 'pdfkit';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -232,6 +233,129 @@ export async function GET(request) {
         pieces: completedPieces,
         generated_at: new Date().toISOString(),
       }, { headers: corsHeaders() });
+    }
+
+    // GET /api/pdf/:token - Generate PDF server-side with Cloudinary images
+    if (segments[0] === 'pdf' && segments[1]) {
+      const edl = await db.collection('edl').findOne({ download_token: segments[1] });
+      if (!edl) return NextResponse.json({ error: 'Lien invalide ou expiré' }, { status: 404, headers: corsHeaders() });
+      if (!edl.paid) return NextResponse.json({ error: 'Rapport non payé' }, { status: 403, headers: corsHeaders() });
+      
+      const pieces = await db.collection('pieces').find({ edl_id: edl.id, statut: 'completed' }).toArray();
+      
+      // Fetch all photos
+      for (const piece of pieces) {
+        const photos = await db.collection('photos').find({ piece_id: piece.id }).toArray();
+        piece.photos = photos;
+      }
+      
+      // Create PDF with PDFKit
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks = [];
+      
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => {});
+      
+      // Cover page
+      doc.rect(0, 0, 595, 200).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(32).text('État des Lieux', 50, 80, { align: 'center' });
+      doc.fontSize(18).text(edl.type_edl === 'entree' ? "d'Entrée" : 'de Sortie', 50, 120, { align: 'center' });
+      doc.fontSize(12).text(new Date(edl.created_at).toLocaleDateString('fr-FR'), 50, 150, { align: 'center' });
+      
+      // Info section
+      doc.fillColor('#000000').fontSize(14).text('Informations', 50, 250);
+      doc.fontSize(11);
+      doc.text(`Adresse : ${edl.adresse}`, 50, 280);
+      doc.text(`Type : ${edl.type_logement}`, 50, 300);
+      doc.text(`Locataire : ${edl.nom_locataire}`, 50, 320);
+      doc.text(`Propriétaire : ${edl.nom_proprietaire}`, 50, 340);
+      
+      // Rooms
+      for (const piece of pieces) {
+        doc.addPage();
+        doc.fillColor('#1e3a5f').fontSize(16).text(piece.nom, 50, 50);
+        doc.fillColor('#000000').fontSize(10);
+        
+        let y = 80;
+        const d = piece.donnees_json || {};
+        
+        if (d.etat_general) {
+          doc.text(`État général : ${d.etat_general}`, 50, y);
+          y += 20;
+        }
+        
+        // Photos with Cloudinary transformation
+        const photos = piece.photos || [];
+        if (photos.length > 0) {
+          doc.fontSize(12).text(`Photos (${photos.length})`, 50, y);
+          y += 25;
+          
+          for (const photo of photos) {
+            if (y > 700) {
+              doc.addPage();
+              y = 50;
+            }
+            
+            try {
+              let imageUrl = photo.url;
+              
+              // Apply Cloudinary transformations for optimization
+              if (imageUrl && imageUrl.includes('cloudinary.com')) {
+                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_800,c_limit/');
+              }
+              
+              // Fetch image
+              const response = await fetch(imageUrl || photo.data);
+              const arrayBuffer = await response.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              
+              // Add image to PDF
+              doc.image(buffer, 50, y, { width: 200, height: 150 });
+              
+              // Photo metadata
+              doc.fontSize(9).fillColor('#666666');
+              doc.text(`Date: ${new Date(photo.horodatage).toLocaleString('fr-FR')}`, 270, y + 10);
+              if (photo.gps) {
+                doc.text(`GPS: ${photo.gps.lat}, ${photo.gps.lng}`, 270, y + 25);
+              }
+              if (photo.legende) {
+                doc.text(photo.legende, 270, y + 40, { width: 250 });
+              }
+              
+              y += 170;
+            } catch (err) {
+              console.error('Error adding image to PDF:', err);
+              doc.fontSize(9).fillColor('#ff0000').text('Erreur chargement photo', 50, y);
+              y += 20;
+            }
+          }
+        }
+      }
+      
+      // Signature page
+      doc.addPage();
+      doc.fontSize(16).fillColor('#1e3a5f').text('Signatures', 50, 50);
+      doc.fontSize(11).fillColor('#000000');
+      doc.text(`Le locataire : ${edl.nom_locataire}`, 50, 100);
+      doc.text(`Le propriétaire : ${edl.nom_proprietaire}`, 50, 150);
+      doc.fontSize(9).fillColor('#666666').text(`Document généré le ${new Date().toLocaleDateString('fr-FR')}`, 50, 700);
+      
+      doc.end();
+      
+      // Wait for PDF to be fully generated
+      await new Promise((resolve) => {
+        doc.on('end', resolve);
+      });
+      
+      const pdfBuffer = Buffer.concat(chunks);
+      
+      return new NextResponse(pdfBuffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="EDL_${edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`,
+          ...corsHeaders(),
+        },
+      });
     }
 
     return NextResponse.json({ error: 'Route not found' }, { status: 404, headers: corsHeaders() });
