@@ -7,6 +7,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Resend } from 'resend';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -18,68 +19,73 @@ cloudinary.config({
   secure: true,
 });
 
-// ==================== EMAIL SENDING VIA EMAILJS API ====================
-async function sendEmailViaEmailJS(toEmail, edl, downloadToken) {
+// ==================== EMAIL SENDING VIA RESEND ====================
+async function sendEmail(toEmail, edl, downloadToken) {
   if (!toEmail || !toEmail.includes('@')) {
-    console.warn('sendEmailViaEmailJS: Invalid email provided');
+    console.warn('sendEmail: Invalid email provided');
     return false;
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const downloadLink = downloadToken ? `${baseUrl}/api/pdf-fresh/${downloadToken}` : '';
 
-  const templateParams = {
-    to_email: toEmail,
-    from_name: 'État des Lieux Pro',
-    subject: `Rapport d'état des lieux - ${edl?.adresse || 'Rapport'}`,
-    message: [
-      `Bonjour,`,
-      ``,
-      `Votre rapport d'état des lieux est prêt !`,
-      ``,
-      `Adresse : ${edl?.adresse || ''}`,
-      `Type : ${edl?.type_logement || ''} — ${edl?.type_edl || ''}`,
-      `Locataire : ${edl?.nom_locataire || ''}`,
-      `Propriétaire : ${edl?.nom_proprietaire || ''}`,
-      `Date : ${new Date().toLocaleDateString('fr-FR')}`,
-      ``,
-      downloadLink ? `Téléchargez votre rapport PDF ici :` : '',
-      downloadLink || '',
-      ``,
-      `Cordialement,`,
-      `État des Lieux Pro`,
-    ].filter(Boolean).join('\n'),
-    to_name: edl?.nom_locataire || 'Destinataire',
-    reply_to: toEmail,
-    download_link: downloadLink,
-  };
-
   try {
-    // EmailJS REST API endpoint
-    const emailjsUrl = `https://api.emailjs.com/api/v1.0/email/send`;
-    const payload = {
-      service_id: process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID,
-      template_id: process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID,
-      user_id: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY,
-      template_params: templateParams,
-    };
-
-    const response = await fetch(emailjsUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('EmailJS API Error:', response.status, errorText);
-      return false;
+    // Check if Resend API key is configured
+    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 'VOTRE_CLE_RESEND_ICI') {
+      console.warn('⚠️  Resend API key not configured. Email NOT sent.');
+      console.warn(`📧 Would send to: ${toEmail}`);
+      console.warn(`📥 PDF link: ${downloadLink}`);
+      return false; // Return false but don't throw error
     }
 
-    console.log(`✅ Email sent successfully to: ${toEmail}`);
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1e3a5f;">🏠 Votre rapport d'état des lieux est prêt !</h2>
+        <p>Bonjour,</p>
+        <p>Votre rapport d'état des lieux a été généré avec succès.</p>
+        
+        <div style="background: #f4f6f9; padding: 20px; border-radius: 10px; margin: 20px 0;">
+          <p><strong>Adresse :</strong> ${edl?.adresse || ''}</p>
+          <p><strong>Type :</strong> ${edl?.type_logement || ''} — ${edl?.type_edl || ''}</p>
+          <p><strong>Locataire :</strong> ${edl?.nom_locataire || ''}</p>
+          <p><strong>Propriétaire :</strong> ${edl?.nom_proprietaire || ''}</p>
+          <p><strong>Date :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+        </div>
+
+        ${downloadLink ? `
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${downloadLink}" 
+               style="background: #2d6ac4; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">
+              📥 Télécharger le PDF
+            </a>
+          </div>
+          <p style="font-size: 12px; color: #666;">
+            Ou copiez ce lien dans votre navigateur :<br>
+            <a href="${downloadLink}">${downloadLink}</a>
+          </p>
+        ` : ''}
+
+        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+        <p style="color: #666; font-size: 12px;">
+          Cordialement,<br>
+          <strong>État des Lieux Pro</strong>
+        </p>
+      </div>
+    `;
+
+    const result = await resend.emails.send({
+      from: 'État des Lieux Pro <onboarding@resend.dev>', // Change this to your verified domain
+      to: toEmail,
+      subject: `Rapport d'état des lieux - ${edl?.adresse || 'Rapport'}`,
+      html: emailHtml,
+    });
+
+    console.log(`✅ Email sent successfully to: ${toEmail} (ID: ${result.data?.id})`);
     return true;
   } catch (error) {
-    console.error('sendEmailViaEmailJS Error:', error);
+    console.error('sendEmail Error:', error.message);
     return false;
   }
 }
@@ -969,6 +975,87 @@ export async function POST(request) {
   try {
     const db = await getDb();
     const segments = getPathSegments(request);
+    
+    // Special handling for Stripe webhook (needs raw body)
+    if (segments[0] === 'stripe' && segments[1] === 'webhook') {
+      const sig = request.headers.get('stripe-signature');
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      
+      if (!webhookSecret) {
+        console.warn('⚠️  STRIPE_WEBHOOK_SECRET not configured');
+        return NextResponse.json({ received: true }, { headers: corsHeaders() });
+      }
+
+      try {
+        const rawBody = await request.text();
+        const event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+
+        console.log(`🔔 Stripe Webhook: ${event.type}`);
+
+        // Handle subscription cancellation
+        if (event.type === 'customer.subscription.deleted') {
+          const subscription = event.data.object;
+          
+          // Find and update the EDL associated with this subscription
+          const result = await db.collection('edl').updateOne(
+            { stripe_payment_id: subscription.id },
+            { 
+              $set: { 
+                subscription_status: 'canceled',
+                subscription_canceled_at: new Date().toISOString()
+              } 
+            }
+          );
+          
+          console.log(`✅ Subscription ${subscription.id} marked as canceled`);
+        }
+
+        // Handle checkout session completed (for one-time payments)
+        if (event.type === 'checkout.session.completed') {
+          const session = event.data.object;
+          const metadata = session.metadata || {};
+          
+          if (metadata.edl_id) {
+            const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
+            
+            // Update EDL
+            await db.collection('edl').updateOne(
+              { id: metadata.edl_id },
+              { 
+                $set: {
+                  paid: true,
+                  statut: 'completed',
+                  stripe_payment_id: session.id,
+                  plan: metadata.plan_code || 'one_shot',
+                  download_token: downloadToken,
+                } 
+              }
+            );
+            
+            // Update transaction
+            await db.collection('payment_transactions').updateOne(
+              { session_id: session.id },
+              { $set: { payment_status: 'paid', status: 'completed' } }
+            );
+            
+            // Get EDL and send email
+            const edl = await db.collection('edl').findOne({ id: metadata.edl_id });
+            if (edl && edl.email_locataire) {
+              await sendEmail(edl.email_locataire, edl, downloadToken);
+            }
+            
+            console.log(`✅ Checkout completed for EDL ${metadata.edl_id}, email sent`);
+          }
+        }
+
+        return NextResponse.json({ received: true }, { headers: corsHeaders() });
+      } catch (err) {
+        console.error('Stripe Webhook Error:', err.message);
+        return NextResponse.json({ error: err.message }, { status: 400, headers: corsHeaders() });
+      }
+    }
+
+    // For all other routes, parse JSON body
     const body = await request.json();
 
     // ============ AUTH ROUTES ============
@@ -1602,7 +1689,7 @@ export async function POST(request) {
           
           if (recipientEmail) {
             console.log(`📧 Attempting to send email to: ${recipientEmail}`);
-            const emailSent = await sendEmailViaEmailJS(recipientEmail, edl, downloadToken);
+            const emailSent = await sendEmail(recipientEmail, edl, downloadToken);
             if (emailSent) {
               console.log(`✅ Email successfully sent to ${recipientEmail}`);
             } else {
@@ -1675,7 +1762,7 @@ export async function POST(request) {
 
         // Send email if email_locataire exists
         if (edl && edl.email_locataire) {
-          await sendEmailViaEmailJS(edl.email_locataire, edl, downloadToken);
+          await sendEmail(edl.email_locataire, edl, downloadToken);
         }
 
         return NextResponse.json({
@@ -1711,64 +1798,6 @@ export async function POST(request) {
       } catch (stripeErr) {
         console.error('Stripe Portal Error:', stripeErr);
         return NextResponse.json({ error: 'Erreur portail: ' + stripeErr.message }, { status: 500, headers: corsHeaders() });
-      }
-    }
-
-    // POST /api/stripe/webhook - Handle Stripe Webhooks (subscription cancellation, etc.)
-    if (segments[0] === 'stripe' && segments[1] === 'webhook') {
-      const sig = request.headers.get('stripe-signature');
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-      
-      if (!webhookSecret) {
-        console.warn('⚠️ STRIPE_WEBHOOK_SECRET not configured');
-        return NextResponse.json({ received: true }, { headers: corsHeaders() });
-      }
-
-      try {
-        const rawBody = await request.text();
-        const event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
-
-        console.log(`🔔 Stripe Webhook: ${event.type}`);
-
-        // Handle subscription cancellation
-        if (event.type === 'customer.subscription.deleted') {
-          const subscription = event.data.object;
-          
-          // Find and update the EDL associated with this subscription
-          const result = await db.collection('edl').updateOne(
-            { stripe_payment_id: subscription.id },
-            { 
-              $set: { 
-                subscription_status: 'canceled',
-                subscription_canceled_at: new Date().toISOString()
-              } 
-            }
-          );
-
-          console.log(`✅ Subscription ${subscription.id} marked as canceled`);
-        }
-
-        // Handle subscription updates
-        if (event.type === 'customer.subscription.updated') {
-          const subscription = event.data.object;
-          
-          await db.collection('edl').updateOne(
-            { stripe_payment_id: subscription.id },
-            { 
-              $set: { 
-                subscription_status: subscription.status,
-                subscription_updated_at: new Date().toISOString()
-              } 
-            }
-          );
-
-          console.log(`✅ Subscription ${subscription.id} updated: ${subscription.status}`);
-        }
-
-        return NextResponse.json({ received: true }, { headers: corsHeaders() });
-      } catch (webhookErr) {
-        console.error('Webhook Error:', webhookErr);
-        return NextResponse.json({ error: webhookErr.message }, { status: 400, headers: corsHeaders() });
       }
     }
 
