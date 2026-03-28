@@ -98,7 +98,7 @@ export default function App() {
   // Form state for new EDL
   const [newEdl, setNewEdl] = useState({
     adresse: '', type_logement: 'T2', type_edl: 'Entrée',
-    nom_locataire: '', nom_proprietaire: '',
+    nom_locataire: '', nom_proprietaire: '', email_locataire: '',
   });
 
   // Register service worker
@@ -215,11 +215,15 @@ export default function App() {
       showNotif('Veuillez remplir tous les champs', 'error');
       return;
     }
+    if (newEdl.email_locataire && !newEdl.email_locataire.includes('@')) {
+      showNotif('Veuillez entrer un email valide', 'error');
+      return;
+    }
     setLoading(true);
     try {
       const edl = await api('edl', { method: 'POST', body: JSON.stringify(newEdl) });
       showNotif('État des lieux créé !');
-      setNewEdl({ adresse: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '' });
+      setNewEdl({ adresse: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '' });
       setShowCreateForm(false);
       await goToRooms(edl);
     } catch (e) { showNotif(e.message, 'error'); }
@@ -432,6 +436,14 @@ function DashboardView({ edls, showCreate, setShowCreate, newEdl, setNewEdl, cre
               <input type="text" value={newEdl.nom_proprietaire} onChange={e => setNewEdl({...newEdl, nom_proprietaire: e.target.value})}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
                 placeholder="Marie Martin" />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Email du locataire (recommandé pour envoi automatique)</label>
+              <input type="email" value={newEdl.email_locataire} onChange={e => setNewEdl({...newEdl, email_locataire: e.target.value})}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                placeholder="jean.dupont@example.com" />
+              <p className="text-xs text-gray-500 mt-1">💡 Le rapport PDF sera envoyé automatiquement à cet email après paiement</p>
             </div>
 
             <div className="flex gap-3 pt-2">

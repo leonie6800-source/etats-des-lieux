@@ -16,6 +16,72 @@ cloudinary.config({
   secure: true,
 });
 
+// ==================== EMAIL SENDING VIA EMAILJS API ====================
+async function sendEmailViaEmailJS(toEmail, edl, downloadToken) {
+  if (!toEmail || !toEmail.includes('@')) {
+    console.warn('sendEmailViaEmailJS: Invalid email provided');
+    return false;
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const downloadLink = downloadToken ? `${baseUrl}/download/${downloadToken}` : '';
+
+  const templateParams = {
+    to_email: toEmail,
+    from_name: 'État des Lieux Pro',
+    subject: `Rapport d'état des lieux - ${edl?.adresse || 'Rapport'}`,
+    message: [
+      `Bonjour,`,
+      ``,
+      `Votre rapport d'état des lieux est prêt !`,
+      ``,
+      `Adresse : ${edl?.adresse || ''}`,
+      `Type : ${edl?.type_logement || ''} — ${edl?.type_edl || ''}`,
+      `Locataire : ${edl?.nom_locataire || ''}`,
+      `Propriétaire : ${edl?.nom_proprietaire || ''}`,
+      `Date : ${new Date().toLocaleDateString('fr-FR')}`,
+      ``,
+      downloadLink ? `Téléchargez votre rapport PDF ici :` : '',
+      downloadLink || '',
+      ``,
+      `Cordialement,`,
+      `État des Lieux Pro`,
+    ].filter(Boolean).join('\n'),
+    to_name: edl?.nom_locataire || 'Destinataire',
+    reply_to: toEmail,
+    download_link: downloadLink,
+  };
+
+  try {
+    // EmailJS REST API endpoint
+    const emailjsUrl = `https://api.emailjs.com/api/v1.0/email/send`;
+    const payload = {
+      service_id: process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID,
+      template_id: process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID,
+      user_id: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY,
+      template_params: templateParams,
+    };
+
+    const response = await fetch(emailjsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('EmailJS API Error:', response.status, errorText);
+      return false;
+    }
+
+    console.log(`✅ Email sent successfully to: ${toEmail}`);
+    return true;
+  } catch (error) {
+    console.error('sendEmailViaEmailJS Error:', error);
+    return false;
+  }
+}
+
 // Upload base64 image to Cloudinary
 async function uploadToCloudinary(base64Data, folder = 'edl-pro') {
   try {
@@ -1235,6 +1301,10 @@ export async function POST(request) {
         return NextResponse.json({ error: 'edl_id and origin_url required' }, { status: 400, headers: corsHeaders() });
       }
 
+      // Get EDL to retrieve email
+      const edl = await db.collection('edl').findOne({ id: edl_id });
+      const customerEmail = edl?.email_locataire || null;
+
       const planDef = PLANS[plan_code] || PLANS.one_shot;
       const lineItems = [];
 
@@ -1288,11 +1358,14 @@ export async function POST(request) {
           mode: planDef.mode === 'subscription' ? 'subscription' : 'payment',
           success_url: successUrl,
           cancel_url: cancelUrl,
+          customer_email: customerEmail || undefined, // Auto-collect email if not provided
+          billing_address_collection: customerEmail ? undefined : 'auto', // Collect address only if no email
           metadata: {
             edl_id,
             plan_code: plan_code || 'one_shot',
             has_comparaison_ia: String(hasComparaisonIA),
             has_archive: String(hasArchive),
+            customer_email: customerEmail || '',
           },
         });
 
@@ -1374,6 +1447,22 @@ export async function POST(request) {
           };
           await db.collection('invoices').insertOne(invoice);
 
+          // ✨ SEND EMAIL AUTOMATICALLY with download link
+          const edl = await db.collection('edl').findOne({ id: metadata.edl_id });
+          const recipientEmail = session.customer_email || metadata.customer_email || edl?.email_locataire;
+          
+          if (recipientEmail) {
+            console.log(`📧 Attempting to send email to: ${recipientEmail}`);
+            const emailSent = await sendEmailViaEmailJS(recipientEmail, edl, downloadToken);
+            if (emailSent) {
+              console.log(`✅ Email successfully sent to ${recipientEmail}`);
+            } else {
+              console.error(`❌ Failed to send email to ${recipientEmail}`);
+            }
+          } else {
+            console.warn('⚠️ No email address found for automatic sending. User will need to download manually.');
+          }
+
           return NextResponse.json({
             status: session.status,
             payment_status: session.payment_status,
@@ -1381,6 +1470,7 @@ export async function POST(request) {
             currency: session.currency,
             download_token: downloadToken,
             edl_id: metadata.edl_id,
+            email_sent: recipientEmail ? true : false,
           }, { headers: corsHeaders() });
         }
 
