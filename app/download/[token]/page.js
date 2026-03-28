@@ -331,24 +331,10 @@ export default function DownloadPage({ params }) {
             </div>
 
             {/* Download button */}
-            {!downloaded ? (
-              <button onClick={generateAndDownloadPDFServer} disabled={generating}
-                className="w-full bg-[#27a96c] text-white font-bold py-4 rounded-2xl hover:bg-[#1f9058] disabled:opacity-50 shadow-lg shadow-green-200 transition-all">
-                {generating ? '⏳ Génération du PDF...' : '📥 Télécharger le rapport PDF'}
-              </button>
-            ) : (
-              <div className="text-center space-y-3">
-                <div className="bg-[#e6f7ef] rounded-2xl p-4">
-                  <div className="text-3xl mb-2">✅</div>
-                  <p className="font-bold text-[#27a96c]">PDF téléchargé !</p>
-                  <p className="text-xs text-gray-500 mt-1">Vérifiez votre dossier Téléchargements</p>
-                </div>
-                <button onClick={() => { setDownloaded(false); generateAndDownloadPDFServer(); }}
-                  className="w-full bg-[#2d6ac4] text-white font-semibold py-3 rounded-xl text-sm">
-                  🔄 Télécharger à nouveau
-                </button>
-              </div>
-            )}
+            <a href={`/api/pdf/${token}`} download
+              className="block w-full bg-[#27a96c] text-white font-bold py-4 rounded-2xl hover:bg-[#1f9058] shadow-lg shadow-green-200 transition-all text-center">
+              📥 Télécharger le rapport PDF
+            </a>
           </div>
 
           {/* Security note */}
