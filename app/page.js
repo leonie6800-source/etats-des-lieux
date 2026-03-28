@@ -50,11 +50,25 @@ function compressForAI(base64, maxWidth = 512) {
 
 // ==================== API HELPERS ====================
 async function api(path, options = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+    ...options.headers,
+  };
+  
   const res = await fetch(`/api/${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
+  
   if (!res.ok) {
+    // If 401, token expired or invalid
+    if (res.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      window.location.reload();
+    }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Erreur API');
   }
@@ -95,6 +109,8 @@ export default function App() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [userEmail, setUserEmail] = useState(null); // User session email
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [authLoading, setAuthLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
   // Form state for new EDL
@@ -171,23 +187,63 @@ export default function App() {
 
   // ---- Init: Load user session on mount ----
   useEffect(() => {
-    const storedEmail = localStorage.getItem('user_email');
-    if (storedEmail) {
-      setUserEmail(storedEmail);
-      fetchEdls(storedEmail);
+    const token = localStorage.getItem('auth_token');
+    const userData = localStorage.getItem('user_data');
+    
+    if (token && userData) {
+      const user = JSON.parse(userData);
+      setUserEmail(user.email);
+      fetchEdls();
     } else {
       setShowEmailPrompt(true);
     }
   }, []);
 
+  // ---- Auth functions ----
+  const handleAuth = async (e, mode) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    
+    const formData = new FormData(e.target);
+    const email = formData.get('email');
+    const password = formData.get('password');
+    const nom = formData.get('nom');
+    
+    try {
+      const endpoint = mode === 'register' ? 'auth/register' : 'auth/login';
+      const result = await api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify(mode === 'register' ? { email, password, nom } : { email, password }),
+      });
+      
+      // Save token and user data
+      localStorage.setItem('auth_token', result.token);
+      localStorage.setItem('user_data', JSON.stringify(result.user));
+      
+      setUserEmail(result.user.email);
+      setShowEmailPrompt(false);
+      fetchEdls();
+      
+      showNotif(mode === 'register' ? 'Compte créé avec succès !' : 'Connexion réussie !');
+    } catch (err) {
+      showNotif(err.message, 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   // ---- Data fetching ----
-  const fetchEdls = useCallback(async (email) => {
-    if (!email) return;
+  const fetchEdls = useCallback(async () => {
     try {
       const cacheBuster = Date.now();
-      const data = await api(`edl?email=${encodeURIComponent(email)}&_t=${cacheBuster}`);
+      const data = await api(`edl?_t=${cacheBuster}`);
       setEdls([...data]); // Force new array reference
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e);
+      if (e.message.includes('authentifié')) {
+        setShowEmailPrompt(true);
+      }
+    }
   }, []);
 
   const fetchPieces = useCallback(async (edlId) => {
@@ -211,7 +267,7 @@ export default function App() {
   useEffect(() => { fetchEdls(); }, [fetchEdls]);
 
   // ---- Navigation ----
-  const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(userEmail); };
+  const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(); };
   const goToRooms = async (edl) => {
     setCurrentEdl({...edl}); // Force new reference
     const cacheBuster = Date.now();
@@ -363,40 +419,79 @@ export default function App() {
   // ==================== RENDER ====================
   return (
     <div className="min-h-screen bg-[#f4f6f9]">
-      {/* Email Prompt Modal */}
+      {/* Auth Modal (Login/Register) */}
       {showEmailPrompt && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <h2 className="text-2xl font-bold text-[#1e3a5f] mb-2">🏠 État des Lieux Pro</h2>
-            <p className="text-gray-600 mb-5 text-sm">Entrez votre email pour accéder à vos états des lieux</p>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const email = e.target.email.value.trim();
-              if (!email || !email.includes('@')) {
-                showNotif('Email invalide', 'error');
-                return;
-              }
-              localStorage.setItem('user_email', email);
-              setUserEmail(email);
-              setShowEmailPrompt(false);
-              fetchEdls(email);
-            }}>
-              <input
-                type="email"
-                name="email"
-                placeholder="votre@email.com"
-                required
-                autoFocus
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 mb-4 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
-              />
-              <button type="submit"
-                className="w-full bg-[#2d6ac4] hover:bg-[#2560b5] text-white font-bold py-3 rounded-xl transition-all">
-                Accéder à mes états des lieux
+        <div className="fixed inset-0 bg-gradient-to-br from-[#1e3a5f] to-[#2d6ac4] z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <h1 className="text-3xl font-bold text-[#1e3a5f] mb-2">🏠 État des Lieux Pro</h1>
+              <p className="text-gray-600 text-sm">
+                {authMode === 'login' ? 'Connectez-vous à votre compte' : 'Créez votre compte professionnel'}
+              </p>
+            </div>
+
+            <form onSubmit={(e) => handleAuth(e, authMode)} className="space-y-4">
+              {authMode === 'register' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom complet</label>
+                  <input
+                    type="text"
+                    name="nom"
+                    placeholder="Jean Dupont"
+                    required
+                    className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="vous@exemple.com"
+                  required
+                  autoFocus={authMode === 'login'}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                />
+                {authMode === 'register' && (
+                  <p className="text-xs text-gray-500 mt-1">Minimum 6 caractères</p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full bg-[#2d6ac4] hover:bg-[#2560b5] text-white font-bold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                {authLoading ? '⏳ Chargement...' : (authMode === 'login' ? '🔓 Se connecter' : '✅ Créer mon compte')}
               </button>
             </form>
-            <p className="text-xs text-gray-500 mt-4 text-center">
-              Vos données sont stockées localement et sécurisées
-            </p>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                className="text-sm text-[#2d6ac4] hover:underline">
+                {authMode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
+              </button>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <p className="text-xs text-gray-500 text-center">
+                🔒 Vos données sont sécurisées et chiffrées
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -437,12 +532,13 @@ export default function App() {
                   + Nouveau
                 </button>
                 <button onClick={() => {
-                  localStorage.removeItem('user_email');
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('user_data');
                   setUserEmail(null);
                   setEdls([]);
                   setShowEmailPrompt(true);
                 }}
-                  className="text-white/70 hover:text-white text-xs">
+                  className="text-white/70 hover:text-white text-xs" title="Déconnexion">
                   🚪
                 </button>
               </div>

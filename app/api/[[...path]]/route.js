@@ -5,6 +5,8 @@ import OpenAI, { toFile } from 'openai';
 import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -122,6 +124,41 @@ const ADDONS = {
 const client = new MongoClient(process.env.MONGO_URL);
 const dbName = process.env.DB_NAME || 'edl_pro';
 
+// ============ AUTH HELPERS ============
+function generateToken(userId, email) {
+  return jwt.sign(
+    { userId, email },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
+async function hashPassword(password) {
+  return await bcrypt.hash(password, 10);
+}
+
+async function comparePassword(password, hash) {
+  return await bcrypt.compare(password, hash);
+}
+
+// Middleware to extract user from JWT
+function getUserFromRequest(request) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  return verifyToken(token);
+}
+
 let dbInstance = null;
 
 async function getDb() {
@@ -187,11 +224,14 @@ export async function GET(request) {
 
     // GET /api/edl
     if (segments[0] === 'edl' && !segments[1]) {
-      // Filter by email if provided (user isolation)
-      const { email } = Object.fromEntries(url.searchParams);
-      const filter = email ? { email_locataire: email } : {};
+      // Require auth for GET /api/edl
+      const authUser = getUserFromRequest(request);
+      if (!authUser) {
+        return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+      }
       
-      const edls = await db.collection('edl').find(filter).sort({ created_at: -1 }).toArray();
+      // Filter EDL by authenticated user
+      const edls = await db.collection('edl').find({ user_id: authUser.userId }).sort({ created_at: -1 }).toArray();
       for (let edl of edls) {
         const pieces = await db.collection('pieces').find({ edl_id: edl.id }).toArray();
         const photos = await db.collection('photos').find({ edl_id: edl.id }).toArray();
@@ -931,10 +971,88 @@ export async function POST(request) {
     const segments = getPathSegments(request);
     const body = await request.json();
 
+    // ============ AUTH ROUTES ============
+    
+    // POST /api/auth/register
+    if (segments[0] === 'auth' && segments[1] === 'register') {
+      const { email, password, nom } = body;
+      
+      if (!email || !password || !nom) {
+        return NextResponse.json({ error: 'Email, mot de passe et nom requis' }, { status: 400, headers: corsHeaders() });
+      }
+      
+      if (password.length < 6) {
+        return NextResponse.json({ error: 'Le mot de passe doit contenir au moins 6 caractères' }, { status: 400, headers: corsHeaders() });
+      }
+      
+      // Check if user exists
+      const existingUser = await db.collection('users').findOne({ email });
+      if (existingUser) {
+        return NextResponse.json({ error: 'Cet email est déjà utilisé' }, { status: 400, headers: corsHeaders() });
+      }
+      
+      // Create user
+      const hashedPassword = await hashPassword(password);
+      const userId = uuidv4();
+      const user = {
+        id: userId,
+        email,
+        nom,
+        password: hashedPassword,
+        created_at: new Date().toISOString(),
+      };
+      
+      await db.collection('users').insertOne(user);
+      
+      // Generate token
+      const token = generateToken(userId, email);
+      
+      return NextResponse.json({
+        token,
+        user: { id: userId, email, nom }
+      }, { headers: corsHeaders() });
+    }
+    
+    // POST /api/auth/login
+    if (segments[0] === 'auth' && segments[1] === 'login') {
+      const { email, password } = body;
+      
+      if (!email || !password) {
+        return NextResponse.json({ error: 'Email et mot de passe requis' }, { status: 400, headers: corsHeaders() });
+      }
+      
+      // Find user
+      const user = await db.collection('users').findOne({ email });
+      if (!user) {
+        return NextResponse.json({ error: 'Email ou mot de passe incorrect' }, { status: 401, headers: corsHeaders() });
+      }
+      
+      // Verify password
+      const validPassword = await comparePassword(password, user.password);
+      if (!validPassword) {
+        return NextResponse.json({ error: 'Email ou mot de passe incorrect' }, { status: 401, headers: corsHeaders() });
+      }
+      
+      // Generate token
+      const token = generateToken(user.id, user.email);
+      
+      return NextResponse.json({
+        token,
+        user: { id: user.id, email: user.email, nom: user.nom }
+      }, { headers: corsHeaders() });
+    }
+
+    // ============ PROTECTED ROUTES (require auth) ============
+    const authUser = getUserFromRequest(request);
+    if (!authUser && !segments[0]?.startsWith('stripe')) { // Allow stripe webhooks without auth
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+    }
+
     // POST /api/edl
     if (segments[0] === 'edl' && !segments[1]) {
       const edl = {
         id: uuidv4(),
+        user_id: authUser.userId, // Link EDL to authenticated user
         created_at: new Date().toISOString(),
         adresse: body.adresse || '',
         type_logement: body.type_logement || 'T2',
