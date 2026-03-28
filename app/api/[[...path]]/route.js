@@ -754,11 +754,11 @@ export async function GET(request) {
       page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
       page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
       
-      // BLOC DESIGN CENTRÉ : Logo + Nom de l'application
+      // BLOC DESIGN EN BAS À DROITE : Logo + Nom de l'application
       const blockWidth = 250;
       const blockHeight = 150;
-      const blockX = (595 - blockWidth) / 2; // Centré
-      const blockY = 120;
+      const blockX = 595 - blockWidth - 30; // En bas à droite avec marge
+      const blockY = 40; // En bas de page
       
       // Fond du bloc avec bordure
       page.drawRectangle({ 
@@ -799,10 +799,17 @@ export async function GET(request) {
         color: rgb(0.5, 0.5, 0.5) 
       });
       
-      // Footer (en dessous du bloc)
-      page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
-        x: 50,
-        y: 50,
+      // Footer (à gauche, pas sous le bloc)
+      page.drawText(`Généré certifié par État des Lieux Pro.`, {
+        x: 40,
+        y: 70,
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5)
+      });
+      page.drawText(`Horodatage et intégrité des données garantis.`, {
+        x: 40,
+        y: 55,
         size: 8,
         font,
         color: rgb(0.5, 0.5, 0.5)
