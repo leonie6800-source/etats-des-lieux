@@ -423,7 +423,8 @@ export async function GET(request) {
       return new NextResponse(pdfBytes, {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="EDL_${edl.adresse?.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`,
+          'Content-Disposition': `attachment; filename="EDL_NOUVEAU_${Date.now()}.pdf"`,
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
           ...corsHeaders(),
         },
       });
