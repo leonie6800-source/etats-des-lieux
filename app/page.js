@@ -141,15 +141,15 @@ export default function App() {
     }
 
     if (paymentSuccess && sessionId && edlId) {
-      // Poll Stripe for payment status
-      const pollPayment = async () => {
+      // Poll Stripe for payment status with retry logic
+      const pollPayment = async (attempt = 0, maxAttempts = 5) => {
         try {
           const result = await api('stripe/status', {
             method: 'POST',
             body: JSON.stringify({ session_id: sessionId }),
           });
 
-          console.log('Payment status result:', result);
+          console.log(`Payment status result (attempt ${attempt + 1}):`, result);
 
           // Check if payment is complete (paid, no_payment_required for $0, or download_token exists)
           const isComplete = result.payment_status === 'paid' || 
@@ -157,22 +157,48 @@ export default function App() {
                            result.download_token;
 
           if (isComplete) {
+            // Wait a bit for webhook to fully process
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
             showNotif('Paiement réussi ! Votre rapport est débloqué 🎉');
-            // Navigate to report view with fresh data (includes download_token)
+            
+            // Force complete refresh with cache busting
             const cacheBuster = Date.now();
             const edl = await api(`edl/${edlId}?_t=${cacheBuster}`);
-            if (edl) {
-              setCurrentEdl({...edl}); // Force new reference with download_token
+            
+            if (edl && edl.paid) {
+              // Force new object reference to trigger re-render
+              setCurrentEdl({ ...edl, _refreshKey: cacheBuster });
               const piecesData = await api(`pieces?edl_id=${edlId}&_t=${cacheBuster}`);
               setPieces([...piecesData]);
               setView('report');
+              
+              // Also refresh the EDL list
+              fetchEdls();
+            } else if (attempt < maxAttempts - 1) {
+              // EDL not yet marked as paid, retry after delay
+              console.log('EDL not yet paid, retrying...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              return pollPayment(attempt + 1, maxAttempts);
+            } else {
+              showNotif('Le paiement est en cours de traitement. Rechargez la page dans quelques instants.', 'error');
             }
+          } else if (attempt < maxAttempts - 1) {
+            // Payment not complete, retry
+            showNotif('Vérification du paiement en cours...', 'info');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return pollPayment(attempt + 1, maxAttempts);
           } else {
-            showNotif('Vérification du paiement en cours...', 'error');
+            showNotif('Erreur : Le paiement n\'a pas pu être vérifié. Contactez le support.', 'error');
           }
         } catch (e) {
           console.error('Payment poll error:', e);
-          showNotif('Erreur lors de la vérification du paiement', 'error');
+          if (attempt < maxAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return pollPayment(attempt + 1, maxAttempts);
+          } else {
+            showNotif('Erreur lors de la vérification du paiement', 'error');
+          }
         }
         window.history.replaceState({}, '', '/');
       };
@@ -303,8 +329,10 @@ export default function App() {
   // ---- Navigation ----
   const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(); };
   const goToRooms = async (edl) => {
-    setCurrentEdl({...edl}); // Force new reference
+    // Always fetch fresh EDL data from DB
     const cacheBuster = Date.now();
+    const freshEdl = await api(`edl/${edl.id}?_t=${cacheBuster}`);
+    setCurrentEdl({...freshEdl, _refreshKey: cacheBuster}); // Force new reference with fresh data
     const piecesData = await api(`pieces?edl_id=${edl.id}&_t=${cacheBuster}`);
     setPieces([...piecesData]); // Force new reference
     setView('rooms');
@@ -317,8 +345,10 @@ export default function App() {
     setView('inspection');
   };
   const goToReport = async (edl) => {
-    setCurrentEdl({...edl}); // Force new reference
+    // Always fetch fresh EDL data from DB to ensure we have latest paid status
     const cacheBuster = Date.now();
+    const freshEdl = await api(`edl/${edl.id}?_t=${cacheBuster}`);
+    setCurrentEdl({...freshEdl, _refreshKey: cacheBuster}); // Force new reference with fresh data
     const piecesData = await api(`pieces?edl_id=${edl.id}&_t=${cacheBuster}`);
     setPieces([...piecesData]); // Force new reference
     setView('report');
