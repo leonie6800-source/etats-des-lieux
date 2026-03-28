@@ -225,6 +225,7 @@ export default function App() {
       showNotif('État des lieux créé !');
       setNewEdl({ adresse: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '' });
       setShowCreateForm(false);
+      await fetchEdls(); // ✅ REFRESH la liste des EDL
       await goToRooms(edl);
     } catch (e) { showNotif(e.message, 'error'); }
     setLoading(false);
@@ -243,9 +244,10 @@ export default function App() {
       });
       if (nextStep > 5) {
         showNotif('Pièce terminée !');
-        // Refresh and go back to rooms
+        // Refresh pieces AND edl to update progress
         if (currentEdl) {
           await fetchPieces(currentEdl.id);
+          await fetchEdls(); // ✅ REFRESH pour mettre à jour le compteur de progression
         }
         setView('rooms');
       } else {
