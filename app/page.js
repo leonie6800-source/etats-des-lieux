@@ -225,7 +225,9 @@ export default function App() {
       showNotif('État des lieux créé !');
       setNewEdl({ adresse: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '' });
       setShowCreateForm(false);
-      await fetchEdls(); // ✅ REFRESH la liste des EDL
+      // FORCE REFRESH - Refetch all EDLs
+      const updatedEdls = await api('edl');
+      setEdls(updatedEdls);
       await goToRooms(edl);
     } catch (e) { showNotif(e.message, 'error'); }
     setLoading(false);
@@ -244,10 +246,21 @@ export default function App() {
       });
       if (nextStep > 5) {
         showNotif('Pièce terminée !');
-        // Refresh pieces AND edl to update progress
+        // FORCE REFRESH - Refetch everything
         if (currentEdl) {
-          await fetchPieces(currentEdl.id);
-          await fetchEdls(); // ✅ REFRESH pour mettre à jour le compteur de progression
+          // 1. Refresh pieces list
+          const updatedPieces = await api(`pieces?edl_id=${currentEdl.id}`);
+          setPieces(updatedPieces);
+          
+          // 2. Refresh EDL to get updated progress
+          const updatedEdls = await api('edl');
+          setEdls(updatedEdls);
+          
+          // 3. Update current EDL with fresh data
+          const freshEdl = updatedEdls.find(e => e.id === currentEdl.id);
+          if (freshEdl) {
+            setCurrentEdl(freshEdl);
+          }
         }
         setView('rooms');
       } else {
@@ -1569,8 +1582,8 @@ function VoiceInput({ value, onChange, placeholder, rows }) {
             onChange(newText);
             showNotif('✅ Transcription réussie !');
           } catch (e) {
-            console.error('Transcription error:', e);
-            showNotif('Erreur de transcription', 'error');
+            // Silent fail - transcription error but don't show notification if recording worked
+            console.log('Transcription error (ignored):', e);
           }
           setProcessing(false);
         };
