@@ -206,6 +206,24 @@ export default function App() {
     }
   }, []);
 
+  // Block body scroll when auth modal is open
+  useEffect(() => {
+    if (showEmailPrompt) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
+  }, [showEmailPrompt]);
+
   // ---- Auth functions ----
   const handleAuth = async (e, mode) => {
     e.preventDefault();
@@ -241,17 +259,28 @@ export default function App() {
 
   // ---- Data fetching ----
   const fetchEdls = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      // No token, don't try to fetch
+      return;
+    }
+    
     try {
       const cacheBuster = Date.now();
       const data = await api(`edl?_t=${cacheBuster}`);
       setEdls([...data]); // Force new array reference
     } catch (e) { 
-      console.error(e);
-      if (e.message.includes('authentifié')) {
-        setShowEmailPrompt(true);
+      console.error('fetchEdls error:', e.message);
+      // Don't set state in a loop - only if we have a token but it failed
+      if (e.message.includes('authentifié') || e.message.includes('Session expirée')) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+        if (!showEmailPrompt) {
+          setShowEmailPrompt(true);
+        }
       }
     }
-  }, []);
+  }, [showEmailPrompt]);
 
   const fetchPieces = useCallback(async (edlId) => {
     try {
@@ -270,8 +299,6 @@ export default function App() {
       console.error('Erreur chargement photos:', e); 
     }
   }, []);
-
-  useEffect(() => { fetchEdls(); }, [fetchEdls]);
 
   // ---- Navigation ----
   const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(); };
