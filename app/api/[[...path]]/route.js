@@ -486,22 +486,23 @@ export async function GET(request) {
         piece.photos = photos;
       }
       
-      // Load logo
+      // Create PDF with pdf-lib FIRST
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+      const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
+      
+      // Load logo AFTER creating pdfDoc
       const logoPath = '/tmp/logo-edl-pro.png';
       let logoImage = null;
       try {
         const fs = require('fs');
         const logoBytes = fs.readFileSync(logoPath);
         logoImage = await pdfDoc.embedPng(logoBytes);
+        console.log('✅ Logo loaded successfully');
       } catch (err) {
-        console.error('Logo not found, continuing without it');
+        console.error('❌ Logo error:', err);
       }
-      
-      // Create PDF with pdf-lib
-      const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
-      const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
-      const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
       
       const reportId = `EDL-${(edl.id || '').substring(0, 8).toUpperCase()}`;
       const typeEdl = edl.type_edl === 'entree' ? 'ENTRÉE' : 'SORTIE';
