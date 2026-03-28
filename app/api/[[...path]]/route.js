@@ -278,11 +278,12 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo ÉNORME - toute la page)
+      // WATERMARK (logo PLEINE PAGE - adapté aux dimensions A4)
       if (logoImage) {
-        const watermarkSize = 700; // ÉNORME - prend toute la page
-        const watermarkX = (595 - watermarkSize) / 2;
-        const watermarkY = (842 - watermarkSize) / 2;
+        // Prendre toute la hauteur de la page A4
+        const watermarkSize = 842; // Hauteur complète de la page A4
+        const watermarkX = (595 - watermarkSize) / 2; // Centré horizontalement (déborde un peu)
+        const watermarkY = 0; // Du bas au haut
         page.drawImage(logoImage, {
           x: watermarkX,
           y: watermarkY,
@@ -290,7 +291,7 @@ export async function GET(request) {
           height: watermarkSize,
           opacity: 0.08
         });
-        console.log('✅ Watermark added');
+        console.log('✅ Watermark added - FULL PAGE');
       }
       
       // BANDEAU BLEU PLUS GROS en haut
@@ -546,11 +547,12 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo ÉNORME - toute la page)
+      // WATERMARK (logo PLEINE PAGE - adapté aux dimensions A4)
       if (logoImage) {
-        const watermarkSize = 700; // ÉNORME - prend toute la page
-        const watermarkX = (595 - watermarkSize) / 2;
-        const watermarkY = (842 - watermarkSize) / 2;
+        // Prendre toute la hauteur de la page A4
+        const watermarkSize = 842; // Hauteur complète de la page A4
+        const watermarkX = (595 - watermarkSize) / 2; // Centré horizontalement (déborde un peu)
+        const watermarkY = 0; // Du bas au haut
         page.drawImage(logoImage, {
           x: watermarkX,
           y: watermarkY,
@@ -558,7 +560,7 @@ export async function GET(request) {
           height: watermarkSize,
           opacity: 0.08
         });
-        console.log('✅ Watermark added');
+        console.log('✅ Watermark added - FULL PAGE');
       }
       
       // BANDEAU BLEU PLUS GROS en haut
