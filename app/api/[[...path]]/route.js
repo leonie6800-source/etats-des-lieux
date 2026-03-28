@@ -278,7 +278,7 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo as watermark at 15% opacity in center)
+      // WATERMARK (logo as watermark at 8% opacity in center)
       if (logoImage) {
         const watermarkSize = 250;
         const watermarkX = (595 - watermarkSize) / 2;
@@ -290,25 +290,29 @@ export async function GET(request) {
           height: watermarkSize,
           opacity: 0.08
         });
+        console.log('✅ Watermark added');
       }
       
-      // HEADER with logo and title
+      // BANDEAU BLEU en haut
+      page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: colorPrimary });
+      
+      // LOGO dans le bandeau bleu (left)
       if (logoImage) {
-        page.drawImage(logoImage, { x: 40, y: 780, width: 80, height: 80 });
+        page.drawImage(logoImage, { x: 20, y: 798, width: 40, height: 40 });
+        console.log('✅ Logo added to header');
       }
       
-      // Title (right side)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 820, size: 24, font: fontBold, color: colorPrimary });
+      // Title in bandeau (center-right)
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 180, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
       
-      // Header line separator
-      page.drawLine({ start: { x: 40, y: 770 }, end: { x: 555, y: 770 }, thickness: 2, color: colorPrimary });
+      // Header line separator (removed - bandeau replaces it)
       
-      // Report ID and date
-      page.drawText(`N° ${reportId}`, { x: 40, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 728, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      // Report ID and date (below bandeau)
+      page.drawText(`N° ${reportId}`, { x: 40, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 748, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
       
-      yPos = 690;
+      yPos = 720;
       
       // SECTION: Propriétaire (styled box)
       page.drawRectangle({ x: 40, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
@@ -516,7 +520,7 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo as watermark at 15% opacity in center)
+      // WATERMARK (logo as watermark at 8% opacity in center)
       if (logoImage) {
         const watermarkSize = 250;
         const watermarkX = (595 - watermarkSize) / 2;
@@ -528,25 +532,29 @@ export async function GET(request) {
           height: watermarkSize,
           opacity: 0.08
         });
+        console.log('✅ Watermark added');
       }
       
-      // HEADER with logo and title
+      // BANDEAU BLEU en haut
+      page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: colorPrimary });
+      
+      // LOGO dans le bandeau bleu (left)
       if (logoImage) {
-        page.drawImage(logoImage, { x: 40, y: 780, width: 80, height: 80 });
+        page.drawImage(logoImage, { x: 20, y: 798, width: 40, height: 40 });
+        console.log('✅ Logo added to header');
       }
       
-      // Title (right side)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 820, size: 24, font: fontBold, color: colorPrimary });
+      // Title in bandeau (center-right)
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 180, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
       
-      // Header line separator
-      page.drawLine({ start: { x: 40, y: 770 }, end: { x: 555, y: 770 }, thickness: 2, color: colorPrimary });
+      // Header line separator (removed - bandeau replaces it)
       
-      // Report ID and date
-      page.drawText(`N° ${reportId}`, { x: 40, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 728, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      // Report ID and date (below bandeau)
+      page.drawText(`N° ${reportId}`, { x: 40, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 748, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
       
-      yPos = 690;
+      yPos = 720;
       
       // SECTION: Propriétaire (styled box)
       page.drawRectangle({ x: 40, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
