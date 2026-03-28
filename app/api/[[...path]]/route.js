@@ -1571,6 +1571,50 @@ export async function POST(request) {
       }
     }
 
+    // POST /api/test/unlock-report - TEST ONLY: Force unlock report (bypass Stripe)
+    if (segments[0] === 'test' && segments[1] === 'unlock-report') {
+      const { edl_id, email } = body;
+      
+      if (!edl_id) {
+        return NextResponse.json({ error: 'edl_id required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      try {
+        const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
+        
+        // Update EDL
+        await db.collection('edl').updateOne(
+          { id: edl_id },
+          { $set: {
+            paid: true,
+            statut: 'completed',
+            stripe_payment_id: 'test_bypass_' + Date.now(),
+            plan: 'one_shot',
+            download_token: downloadToken,
+          } }
+        );
+
+        // Get updated EDL
+        const edl = await db.collection('edl').findOne({ id: edl_id });
+
+        // Send email if provided
+        if (email) {
+          await sendEmailViaEmailJS(email, edl, downloadToken);
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: 'Rapport débloqué (mode test)',
+          download_token: downloadToken,
+          edl_id: edl_id,
+        }, { headers: corsHeaders() });
+
+      } catch (err) {
+        console.error('Test Unlock Error:', err);
+        return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
     // POST /api/stripe/webhook - Handle Stripe Webhooks (subscription cancellation, etc.)
     if (segments[0] === 'stripe' && segments[1] === 'webhook') {
       const sig = request.headers.get('stripe-signature');
