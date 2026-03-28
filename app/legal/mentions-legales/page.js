@@ -7,22 +7,20 @@ export default function MentionsLegales() {
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-[#2d6ac4] mb-3">1. Éditeur du site</h2>
           <p className="text-gray-700 leading-relaxed">
-            <strong>Raison sociale :</strong> [VOTRE ENTREPRISE]<br/>
-            <strong>Forme juridique :</strong> [SARL/SAS/Auto-entrepreneur]<br/>
-            <strong>Capital social :</strong> [MONTANT] euros<br/>
-            <strong>Siège social :</strong> [ADRESSE COMPLÈTE]<br/>
-            <strong>SIRET :</strong> [NUMÉRO SIRET]<br/>
-            <strong>RCS :</strong> [VILLE]<br/>
-            <strong>Email :</strong> contact@votre-domaine.fr<br/>
-            <strong>Téléphone :</strong> [NUMÉRO]
+            <strong>Raison sociale :</strong> Bouillet Aurélie<br/>
+            <strong>Forme juridique :</strong> Entreprise Individuelle (micro-entreprise)<br/>
+            <strong>Siège social :</strong> 10 rue de l'église, 68470 Fellering<br/>
+            <strong>SIRET :</strong> 493 875 223 00072<br/>
+            <strong>Email :</strong> Lilyfab25@gmail.com<br/>
+            <strong>Téléphone :</strong> [Votre numéro de téléphone]
           </p>
         </section>
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-[#2d6ac4] mb-3">2. Directeur de publication</h2>
           <p className="text-gray-700 leading-relaxed">
-            <strong>Nom :</strong> [NOM DU DIRECTEUR]<br/>
-            <strong>Email :</strong> contact@votre-domaine.fr
+            <strong>Nom :</strong> Aurélie Bouillet<br/>
+            <strong>Email :</strong> Lilyfab25@gmail.com
           </p>
         </section>
 

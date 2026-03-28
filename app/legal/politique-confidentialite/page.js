@@ -9,10 +9,10 @@ export default function PolitiqueConfidentialite() {
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-[#2d6ac4] mb-3">1. Responsable du traitement</h2>
           <p className="text-gray-700 leading-relaxed">
-            <strong>Raison sociale :</strong> [VOTRE ENTREPRISE]<br/>
-            <strong>Adresse :</strong> [ADRESSE]<br/>
-            <strong>Email :</strong> contact@votre-domaine.fr<br/>
-            <strong>Téléphone :</strong> [NUMÉRO]
+            <strong>Raison sociale :</strong> Bouillet Aurélie<br/>
+            <strong>Adresse :</strong> 10 rue de l'église, 68470 Fellering<br/>
+            <strong>Email :</strong> Lilyfab25@gmail.com<br/>
+            <strong>Téléphone :</strong> [Votre numéro de téléphone]
           </p>
         </section>
 
@@ -97,7 +97,7 @@ export default function PolitiqueConfidentialite() {
             <li><strong>Droit de limitation</strong> : Limiter le traitement de vos données</li>
           </ul>
           <p className="text-gray-700 leading-relaxed mt-3">
-            Pour exercer vos droits, contactez-nous à : <a href="mailto:contact@votre-domaine.fr" className="text-blue-600 hover:underline">contact@votre-domaine.fr</a>
+            Pour exercer vos droits, contactez-nous à : <a href="mailto:Lilyfab25@gmail.com" className="text-blue-600 hover:underline">Lilyfab25@gmail.com</a>
           </p>
         </section>
 
