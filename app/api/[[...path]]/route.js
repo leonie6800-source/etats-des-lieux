@@ -728,28 +728,44 @@ export async function GET(request) {
           page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 11, font, color: rgb(0.3, 0.3, 0.3) });
           
           // Embed first photo as thumbnail (larger: 80x60)
-          if (photos[0].url) {
+          const firstPhoto = photos[0];
+          if (firstPhoto.url || firstPhoto.data) {
             try {
-              let imageUrl = photos[0].url;
-              // Apply Cloudinary transformations
-              if (imageUrl.includes('cloudinary.com')) {
-                imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_300,c_limit/');
+              let imageBytes;
+              
+              // Check if we have URL or base64 data
+              if (firstPhoto.url) {
+                // Image is stored in Cloudinary
+                let imageUrl = firstPhoto.url;
+                // Apply Cloudinary transformations
+                if (imageUrl.includes('cloudinary.com')) {
+                  imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_300,c_limit/');
+                }
+                
+                const imgResponse = await fetch(imageUrl);
+                
+                if (!imgResponse.ok) {
+                  throw new Error(`HTTP ${imgResponse.status}`);
+                }
+                
+                imageBytes = await imgResponse.arrayBuffer();
+              } else if (firstPhoto.data) {
+                // Image is base64 data in DB
+                const base64Data = firstPhoto.data.split(',')[1]; // Remove data:image/jpeg;base64,
+                const binaryString = Buffer.from(base64Data, 'base64');
+                imageBytes = binaryString.buffer.slice(binaryString.byteOffset, binaryString.byteOffset + binaryString.byteLength);
               }
               
-              const imgResponse = await fetch(imageUrl);
-              
-              if (!imgResponse.ok) {
-                throw new Error(`HTTP ${imgResponse.status}`);
+              if (!imageBytes) {
+                throw new Error('No image data');
               }
-              
-              const imgBytes = await imgResponse.arrayBuffer();
               
               // Try to embed as JPG
               let image;
               try {
-                image = await pdfDoc.embedJpg(imgBytes);
+                image = await pdfDoc.embedJpg(imageBytes);
               } catch (jpgErr) {
-                image = await pdfDoc.embedPng(imgBytes);
+                image = await pdfDoc.embedPng(imageBytes);
               }
               
               // Draw image with better positioning (right-aligned, larger)
