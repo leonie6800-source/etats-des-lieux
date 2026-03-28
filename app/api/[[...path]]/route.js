@@ -462,8 +462,10 @@ export async function GET(request) {
       return new NextResponse(pdfBytes, {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="EDL_NOUVEAU_${Date.now()}.pdf"`,
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Content-Disposition': `attachment; filename="EDL_PRO_${reportId}_${Date.now()}.pdf"`,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
           ...corsHeaders(),
         },
       });
