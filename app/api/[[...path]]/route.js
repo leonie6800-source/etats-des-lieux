@@ -335,13 +335,53 @@ export async function GET(request) {
                 imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_200,c_limit/');
               }
               
+              console.log('🖼️  Fetching image:', imageUrl);
               const imgResponse = await fetch(imageUrl);
-              const imgBytes = await imgResponse.arrayBuffer();
-              const image = await pdfDoc.embedJpg(imgBytes);
+              console.log('📥 Image fetched, status:', imgResponse.status);
               
-              page.drawImage(image, { x: 450, y: yPos - 65, width: 60, height: 45 });
+              if (!imgResponse.ok) {
+                throw new Error(`HTTP ${imgResponse.status}`);
+              }
+              
+              const imgBytes = await imgResponse.arrayBuffer();
+              console.log('✅ Image bytes received:', imgBytes.byteLength, 'bytes');
+              
+              // Try to embed as JPG
+              let image;
+              try {
+                image = await pdfDoc.embedJpg(imgBytes);
+                console.log('✅ Image embedded as JPG');
+              } catch (jpgErr) {
+                console.log('⚠️  JPG embed failed, trying PNG:', jpgErr.message);
+                image = await pdfDoc.embedPng(imgBytes);
+                console.log('✅ Image embedded as PNG');
+              }
+              
+              const imgDims = image.scale(0.3);
+              
+              // Draw RED DEBUG BORDER first
+              page.drawRectangle({
+                x: 450,
+                y: yPos - 65,
+                width: 60,
+                height: 45,
+                borderColor: rgb(1, 0, 0),
+                borderWidth: 2
+              });
+              
+              // Draw image
+              page.drawImage(image, {
+                x: 452,
+                y: yPos - 63,
+                width: 56,
+                height: 41
+              });
+              
+              console.log('✅ Image drawn on page at x:450, y:', yPos - 65);
             } catch (err) {
-              console.error('Error embedding image:', err);
+              console.error('❌ Error embedding image:', err);
+              // Draw red X to show error
+              page.drawText('X', { x: 470, y: yPos - 50, size: 20, font, color: rgb(1, 0, 0) });
             }
           }
         }
