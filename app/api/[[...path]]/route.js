@@ -1425,10 +1425,12 @@ export async function POST(request) {
               paid: true,
               statut: 'completed',
               stripe_payment_id: session.payment_intent || session.subscription,
+              stripe_customer_id: session.customer || null, // Store customer ID for portal access
               plan: metadata.plan_code,
               has_comparaison_ia: metadata.has_comparaison_ia === 'true',
               has_archive: metadata.has_archive === 'true',
               download_token: downloadToken,
+              subscription_status: session.subscription ? 'active' : null,
             } }
           );
 
@@ -1490,6 +1492,85 @@ export async function POST(request) {
       } catch (stripeErr) {
         console.error('Stripe Status Error:', stripeErr);
         return NextResponse.json({ error: 'Erreur vérification: ' + stripeErr.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
+    // POST /api/stripe/portal - Create Stripe Customer Portal Session
+    if (segments[0] === 'stripe' && segments[1] === 'portal') {
+      const { customer_id, return_url } = body;
+      
+      if (!customer_id || !return_url) {
+        return NextResponse.json({ error: 'customer_id and return_url required' }, { status: 400, headers: corsHeaders() });
+      }
+
+      try {
+        const session = await stripe.billingPortal.sessions.create({
+          customer: customer_id,
+          return_url: return_url,
+        });
+
+        return NextResponse.json({ url: session.url }, { headers: corsHeaders() });
+      } catch (stripeErr) {
+        console.error('Stripe Portal Error:', stripeErr);
+        return NextResponse.json({ error: 'Erreur portail: ' + stripeErr.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
+    // POST /api/stripe/webhook - Handle Stripe Webhooks (subscription cancellation, etc.)
+    if (segments[0] === 'stripe' && segments[1] === 'webhook') {
+      const sig = request.headers.get('stripe-signature');
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      
+      if (!webhookSecret) {
+        console.warn('⚠️ STRIPE_WEBHOOK_SECRET not configured');
+        return NextResponse.json({ received: true }, { headers: corsHeaders() });
+      }
+
+      try {
+        const rawBody = await request.text();
+        const event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+
+        console.log(`🔔 Stripe Webhook: ${event.type}`);
+
+        // Handle subscription cancellation
+        if (event.type === 'customer.subscription.deleted') {
+          const subscription = event.data.object;
+          
+          // Find and update the EDL associated with this subscription
+          const result = await db.collection('edl').updateOne(
+            { stripe_payment_id: subscription.id },
+            { 
+              $set: { 
+                subscription_status: 'canceled',
+                subscription_canceled_at: new Date().toISOString()
+              } 
+            }
+          );
+
+          console.log(`✅ Subscription ${subscription.id} marked as canceled`);
+        }
+
+        // Handle subscription updates
+        if (event.type === 'customer.subscription.updated') {
+          const subscription = event.data.object;
+          
+          await db.collection('edl').updateOne(
+            { stripe_payment_id: subscription.id },
+            { 
+              $set: { 
+                subscription_status: subscription.status,
+                subscription_updated_at: new Date().toISOString()
+              } 
+            }
+          );
+
+          console.log(`✅ Subscription ${subscription.id} updated: ${subscription.status}`);
+        }
+
+        return NextResponse.json({ received: true }, { headers: corsHeaders() });
+      } catch (webhookErr) {
+        console.error('Webhook Error:', webhookErr);
+        return NextResponse.json({ error: webhookErr.message }, { status: 400, headers: corsHeaders() });
       }
     }
 

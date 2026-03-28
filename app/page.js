@@ -1017,6 +1017,7 @@ function ReportView({ edl, pieces, showNotif }) {
   const [addons, setAddons] = useState({ comparaison_ia: false, archive_securisee: false, archive_type: 'one_time' });
   const [showInvoices, setShowInvoices] = useState(false);
   const [invoices, setInvoices] = useState([]);
+  const [openingPortal, setOpeningPortal] = useState(false);
 
   useEffect(() => {
     async function loadPhotos() {
@@ -1083,6 +1084,36 @@ function ReportView({ edl, pieces, showNotif }) {
       setPaying(false);
     }
   };
+
+  const handleManageSubscription = async () => {
+    if (!edl?.stripe_customer_id) {
+      showNotif('Impossible d\'accéder au portail : client Stripe introuvable', 'error');
+      return;
+    }
+    
+    setOpeningPortal(true);
+    try {
+      const origin = window.location.origin;
+      const result = await api('stripe/portal', {
+        method: 'POST',
+        body: JSON.stringify({
+          customer_id: edl.stripe_customer_id,
+          return_url: `${origin}/?edl_id=${edl.id}`,
+        }),
+      });
+      
+      // Redirect to Stripe Customer Portal
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        throw new Error('Pas de lien portail reçu');
+      }
+    } catch (e) {
+      showNotif('Erreur portail: ' + e.message, 'error');
+      setOpeningPortal(false);
+    }
+  };
+
 
   const generatePDF = async () => {
     setGenerating(true);
@@ -1560,6 +1591,28 @@ function ReportView({ edl, pieces, showNotif }) {
       {/* After payment */}
       {paid && (
         <>
+          {/* Subscription Management - Only for subscription plans */}
+          {edl?.plan && (edl.plan === 'pack_pro' || edl.plan === 'business') && edl?.stripe_customer_id && (
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-4 border border-purple-200">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="font-bold text-purple-900 text-sm">🔄 Abonnement actif</h3>
+                  <p className="text-xs text-purple-700 mt-1">
+                    {edl.plan === 'pack_pro' ? 'Pack Pro' : 'Business'} - 
+                    {edl?.subscription_status === 'canceled' ? ' Annulé' : ' Actif'}
+                  </p>
+                </div>
+                <button onClick={handleManageSubscription} disabled={openingPortal}
+                  className="bg-purple-600 text-white px-4 py-2.5 rounded-xl font-medium text-xs hover:bg-purple-700 disabled:opacity-50 transition-all shadow-sm">
+                  {openingPortal ? '⏳ Ouverture...' : '⚙️ Gérer'}
+                </button>
+              </div>
+              <p className="text-[10px] text-purple-600 mt-2">
+                💡 Vous pouvez annuler votre abonnement, modifier votre moyen de paiement ou télécharger vos factures
+              </p>
+            </div>
+          )}
+
           {/* Signature */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <h3 className="font-bold text-[#1e3a5f] mb-3">✍️ Signature électronique</h3>
