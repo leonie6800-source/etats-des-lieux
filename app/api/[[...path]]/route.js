@@ -278,9 +278,9 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo as watermark TRÈS GROS - 8% opacity in center)
+      // WATERMARK (logo ÉNORME - toute la page)
       if (logoImage) {
-        const watermarkSize = 400; // TRÈS GROS
+        const watermarkSize = 700; // ÉNORME - prend toute la page
         const watermarkX = (595 - watermarkSize) / 2;
         const watermarkY = (842 - watermarkSize) / 2;
         page.drawImage(logoImage, {
@@ -293,43 +293,54 @@ export async function GET(request) {
         console.log('✅ Watermark added');
       }
       
-      // BANDEAU BLEU en haut
-      page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: colorPrimary });
+      // BANDEAU BLEU PLUS GROS en haut
+      page.drawRectangle({ x: 0, y: 742, width: 595, height: 100, color: colorPrimary });
       
-      // LOGO dans le bandeau bleu (left) - GROS
+      // LOGO GROS dans le bandeau bleu (left)
       if (logoImage) {
-        page.drawImage(logoImage, { x: 15, y: 794, width: 60, height: 60 });
+        page.drawImage(logoImage, { x: 20, y: 752, width: 80, height: 80 });
         console.log('✅ Logo added to header');
       }
       
-      // Title in bandeau (center-right)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+      // Title in bandeau (center-right) - PLUS GROS
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 800, size: 26, font: fontBold, color: rgb(1, 1, 1) });
       
-      // Header line separator (removed - bandeau replaces it)
+      yPos = 710;
       
-      // Report ID and date (below bandeau)
-      page.drawText(`N° ${reportId}`, { x: 40, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 748, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      // SECTION INFOS STRUCTURÉE
+      page.drawRectangle({ x: 40, y: yPos - 80, width: 515, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
       
-      yPos = 720;
+      // Colonne 1 : Numéro et Date
+      page.drawText('RÉFÉRENCE', { x: 50, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(reportId, { x: 50, y: yPos - 35, size: 13, font: fontBold });
+      page.drawText('Date', { x: 50, y: yPos - 55, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(new Date(edl.created_at).toLocaleDateString('fr-FR'), { x: 50, y: yPos - 70, size: 11, font });
       
-      // SECTION: Propriétaire (styled box)
+      // Colonne 2 : Adresse
+      page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(edl.adresse.substring(0, 50), { x: 250, y: yPos - 35, size: 11, font });
+      if (edl.adresse.length > 50) {
+        page.drawText(edl.adresse.substring(50), { x: 250, y: yPos - 50, size: 11, font });
+      }
+      
+      yPos -= 100;
+      
+      // SECTION: Propriétaire (styled box) - POLICE PLUS GROSSE
       page.drawRectangle({ x: 40, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
-      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 35, size: 10, font });
-      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 50, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos - 15, size: 12, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 35, size: 11, font });
+      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 50, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
       
-      // SECTION: Locataire (styled box)
+      // SECTION: Locataire (styled box) - POLICE PLUS GROSSE
       page.drawRectangle({ x: 310, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 10, font });
+      page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 12, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 11, font });
       
       yPos -= 110;
       
-      // SECTION HEADER: Détail des pièces
+      // SECTION HEADER: Détail des pièces - POLICE PLUS GROSSE
       page.drawRectangle({ x: 40, y: yPos - 30, width: 515, height: 35, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 14, font: fontBold, color: colorPrimary });
+      page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 16, font: fontBold, color: colorPrimary });
       yPos -= 50;
       
       // PAGE 2+: ROOMS TABLE
@@ -341,9 +352,9 @@ export async function GET(request) {
         if (yPos < 150) {
           page = pdfDoc.addPage([595, 842]);
           
-          // Add watermark to new page
+          // Add HUGE watermark to new page
           if (logoImage) {
-            const watermarkSize = 400;
+            const watermarkSize = 700; // ÉNORME
             const watermarkX = (595 - watermarkSize) / 2;
             const watermarkY = (842 - watermarkSize) / 2;
             page.drawImage(logoImage, {
@@ -535,9 +546,9 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo as watermark TRÈS GROS - 8% opacity in center)
+      // WATERMARK (logo ÉNORME - toute la page)
       if (logoImage) {
-        const watermarkSize = 400; // TRÈS GROS
+        const watermarkSize = 700; // ÉNORME - prend toute la page
         const watermarkX = (595 - watermarkSize) / 2;
         const watermarkY = (842 - watermarkSize) / 2;
         page.drawImage(logoImage, {
@@ -550,43 +561,54 @@ export async function GET(request) {
         console.log('✅ Watermark added');
       }
       
-      // BANDEAU BLEU en haut
-      page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: colorPrimary });
+      // BANDEAU BLEU PLUS GROS en haut
+      page.drawRectangle({ x: 0, y: 742, width: 595, height: 100, color: colorPrimary });
       
-      // LOGO dans le bandeau bleu (left) - GROS
+      // LOGO GROS dans le bandeau bleu (left)
       if (logoImage) {
-        page.drawImage(logoImage, { x: 15, y: 794, width: 60, height: 60 });
+        page.drawImage(logoImage, { x: 20, y: 752, width: 80, height: 80 });
         console.log('✅ Logo added to header');
       }
       
-      // Title in bandeau (center-right)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+      // Title in bandeau (center-right) - PLUS GROS
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 800, size: 26, font: fontBold, color: rgb(1, 1, 1) });
       
-      // Header line separator (removed - bandeau replaces it)
+      yPos = 710;
       
-      // Report ID and date (below bandeau)
-      page.drawText(`N° ${reportId}`, { x: 40, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 765, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 748, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      // SECTION INFOS STRUCTURÉE
+      page.drawRectangle({ x: 40, y: yPos - 80, width: 515, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
       
-      yPos = 720;
+      // Colonne 1 : Numéro et Date
+      page.drawText('RÉFÉRENCE', { x: 50, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(reportId, { x: 50, y: yPos - 35, size: 13, font: fontBold });
+      page.drawText('Date', { x: 50, y: yPos - 55, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(new Date(edl.created_at).toLocaleDateString('fr-FR'), { x: 50, y: yPos - 70, size: 11, font });
       
-      // SECTION: Propriétaire (styled box)
+      // Colonne 2 : Adresse
+      page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(edl.adresse.substring(0, 50), { x: 250, y: yPos - 35, size: 11, font });
+      if (edl.adresse.length > 50) {
+        page.drawText(edl.adresse.substring(50), { x: 250, y: yPos - 50, size: 11, font });
+      }
+      
+      yPos -= 100;
+      
+      // SECTION: Propriétaire (styled box) - POLICE PLUS GROSSE
       page.drawRectangle({ x: 40, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
-      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 35, size: 10, font });
-      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 50, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos - 15, size: 12, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 35, size: 11, font });
+      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 50, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
       
-      // SECTION: Locataire (styled box)
+      // SECTION: Locataire (styled box) - POLICE PLUS GROSSE
       page.drawRectangle({ x: 310, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 10, font });
+      page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 12, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 11, font });
       
       yPos -= 110;
       
-      // SECTION HEADER: Détail des pièces
+      // SECTION HEADER: Détail des pièces - POLICE PLUS GROSSE
       page.drawRectangle({ x: 40, y: yPos - 30, width: 515, height: 35, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 14, font: fontBold, color: colorPrimary });
+      page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 16, font: fontBold, color: colorPrimary });
       yPos -= 50;
       
       // PAGE 2+: ROOMS TABLE
@@ -598,9 +620,9 @@ export async function GET(request) {
         if (yPos < 150) {
           page = pdfDoc.addPage([595, 842]);
           
-          // Add watermark to new page
+          // Add HUGE watermark to new page
           if (logoImage) {
-            const watermarkSize = 400;
+            const watermarkSize = 700; // ÉNORME
             const watermarkX = (595 - watermarkSize) / 2;
             const watermarkY = (842 - watermarkSize) / 2;
             page.drawImage(logoImage, {
@@ -619,23 +641,23 @@ export async function GET(request) {
         const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : colorBg;
         page.drawRectangle({ x: 40, y: yPos - 85, width: 515, height: 95, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
         
-        // Piece name with underline
-        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 20, size: 11, font: fontBold, color: colorPrimary });
+        // Piece name with underline - POLICE PLUS GROSSE
+        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 20, size: 13, font: fontBold, color: colorPrimary });
         page.drawLine({ start: { x: 50, y: yPos - 25 }, end: { x: 200, y: yPos - 25 }, thickness: 1, color: colorBorder });
         
-        // État
+        // État - POLICE PLUS GROSSE
         const etat = d.etat_general || 'Non renseigné';
-        page.drawText(`État: ${etat}`, { x: 50, y: yPos - 40, size: 9, font });
+        page.drawText(`État: ${etat}`, { x: 50, y: yPos - 40, size: 11, font });
         
-        // Observations (IA)
+        // Observations (IA) - POLICE PLUS GROSSE
         if (d.observations_generales) {
           const obs = d.observations_generales.substring(0, 80) + (d.observations_generales.length > 80 ? '...' : '');
-          page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 55, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
+          page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 55, size: 10, font, color: rgb(0.3, 0.3, 0.3) });
         }
         
-        // Photo thumbnails (improved positioning)
+        // Photo thumbnails (improved positioning) - POLICE PLUS GROSSE
         if (photos.length > 0) {
-          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 11, font, color: rgb(0.3, 0.3, 0.3) });
           
           // Embed first photo as thumbnail (larger: 80x60)
           if (photos[0].url) {
@@ -699,9 +721,9 @@ export async function GET(request) {
       // LAST PAGE: SIGNATURES
       page = pdfDoc.addPage([595, 842]);
       
-      // Add watermark to signature page
+      // Add HUGE watermark to signature page
       if (logoImage) {
-        const watermarkSize = 400;
+        const watermarkSize = 700; // ÉNORME
         const watermarkX = (595 - watermarkSize) / 2;
         const watermarkY = (842 - watermarkSize) / 2;
         page.drawImage(logoImage, {
@@ -715,7 +737,7 @@ export async function GET(request) {
       
       yPos = 750;
       
-      page.drawText('SIGNATURES', { x: 250, y: yPos, size: 16, font: fontBold, color: colorPrimary });
+      page.drawText('SIGNATURES', { x: 250, y: yPos, size: 18, font: fontBold, color: colorPrimary });
       yPos -= 50;
       
       // Locataire signature box
