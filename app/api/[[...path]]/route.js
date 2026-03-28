@@ -1640,6 +1640,57 @@ export async function POST(request) {
       }
     }
 
+    // POST /api/admin/unlock - ADMIN: Unlock EDL without payment (for testing)
+    if (segments[0] === 'admin' && segments[1] === 'unlock') {
+      const { edl_id, admin_key } = body;
+      
+      // Simple admin key check (change this in production!)
+      if (admin_key !== 'edl_admin_2026_test') {
+        return NextResponse.json({ error: 'Clé admin invalide' }, { status: 403, headers: corsHeaders() });
+      }
+      
+      if (!edl_id) {
+        return NextResponse.json({ error: 'edl_id requis' }, { status: 400, headers: corsHeaders() });
+      }
+
+      try {
+        const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
+        
+        // Update EDL
+        await db.collection('edl').updateOne(
+          { id: edl_id },
+          { $set: {
+            paid: true,
+            statut: 'completed',
+            stripe_payment_id: 'admin_unlock_' + Date.now(),
+            plan: 'one_shot',
+            download_token: downloadToken,
+          } }
+        );
+
+        // Get updated EDL with email
+        const edl = await db.collection('edl').findOne({ id: edl_id });
+
+        // Send email if email_locataire exists
+        if (edl && edl.email_locataire) {
+          await sendEmailViaEmailJS(edl.email_locataire, edl, downloadToken);
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: 'EDL débloqué (mode admin)',
+          download_token: downloadToken,
+          download_link: `${process.env.NEXT_PUBLIC_BASE_URL}/api/pdf-fresh/${downloadToken}`,
+          edl_id: edl_id,
+          email_sent: edl?.email_locataire ? true : false,
+        }, { headers: corsHeaders() });
+
+      } catch (err) {
+        console.error('Admin unlock error:', err);
+        return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
     // POST /api/stripe/portal - Create Stripe Customer Portal Session
     if (segments[0] === 'stripe' && segments[1] === 'portal') {
       const { customer_id, return_url } = body;
