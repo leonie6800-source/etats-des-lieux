@@ -249,6 +249,17 @@ export async function GET(request) {
         piece.photos = photos;
       }
       
+      // Load logo
+      const logoPath = '/tmp/logo-edl-pro.png';
+      let logoImage = null;
+      try {
+        const fs = require('fs');
+        const logoBytes = fs.readFileSync(logoPath);
+        logoImage = await pdfDoc.embedPng(logoBytes);
+      } catch (err) {
+        console.error('Logo not found, continuing without it');
+      }
+      
       // Create PDF with pdf-lib
       const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
@@ -258,42 +269,64 @@ export async function GET(request) {
       const reportId = `EDL-${(edl.id || '').substring(0, 8).toUpperCase()}`;
       const typeEdl = edl.type_edl === 'entree' ? 'ENTRÉE' : 'SORTIE';
       
+      // Color palette
+      const colorPrimary = rgb(0.17, 0.24, 0.31); // #2C3E50
+      const colorBg = rgb(0.97, 0.98, 0.99); // #F8FAFC
+      const colorBorder = rgb(0.89, 0.91, 0.94); // #E2E8F0
+      
       // PAGE 1: COVER
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // Header background
-      page.drawRectangle({ x: 0, y: 720, width: 595, height: 122, color: rgb(0.12, 0.23, 0.37) });
+      // WATERMARK (logo as watermark at 15% opacity in center)
+      if (logoImage) {
+        const watermarkSize = 250;
+        const watermarkX = (595 - watermarkSize) / 2;
+        const watermarkY = (842 - watermarkSize) / 2;
+        page.drawImage(logoImage, {
+          x: watermarkX,
+          y: watermarkY,
+          width: watermarkSize,
+          height: watermarkSize,
+          opacity: 0.08
+        });
+      }
       
-      // App name (left)
-      page.drawText('État des Lieux Pro', { x: 40, y: 800, size: 16, font: fontBold, color: rgb(1, 1, 1) });
+      // HEADER with logo and title
+      if (logoImage) {
+        page.drawImage(logoImage, { x: 40, y: 780, width: 80, height: 80 });
+      }
       
-      // Title (right)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 250, y: 800, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+      // Title (right side)
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 820, size: 24, font: fontBold, color: colorPrimary });
+      
+      // Header line separator
+      page.drawLine({ start: { x: 40, y: 770 }, end: { x: 555, y: 770 }, thickness: 2, color: colorPrimary });
       
       // Report ID and date
-      page.drawText(`N° ${reportId}`, { x: 40, y: 775, size: 10, font, color: rgb(0.9, 0.9, 0.9) });
-      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 40, y: 760, size: 10, font, color: rgb(0.9, 0.9, 0.9) });
-      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 745, size: 10, font, color: rgb(0.9, 0.9, 0.9) });
+      page.drawText(`N° ${reportId}`, { x: 40, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Date: ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 200, y: 745, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Adresse: ${edl.adresse}`, { x: 40, y: 728, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
       
-      yPos = 680;
+      yPos = 690;
       
-      // Propriétaire block
-      page.drawRectangle({ x: 40, y: yPos - 60, width: 250, height: 80, color: rgb(0.95, 0.95, 0.95) });
-      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos, size: 11, font: fontBold, color: rgb(0.12, 0.23, 0.37) });
-      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 20, size: 10, font });
-      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 35, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      // SECTION: Propriétaire (styled box)
+      page.drawRectangle({ x: 40, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('PROPRIÉTAIRE / AGENCE', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 50, y: yPos - 35, size: 10, font });
+      page.drawText(`Type: ${edl.type_logement}`, { x: 50, y: yPos - 50, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
       
-      // Locataire block
-      page.drawRectangle({ x: 305, y: yPos - 60, width: 250, height: 80, color: rgb(0.95, 0.95, 0.95) });
-      page.drawText('LOCATAIRE', { x: 315, y: yPos, size: 11, font: fontBold, color: rgb(0.12, 0.23, 0.37) });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 315, y: yPos - 20, size: 10, font });
+      // SECTION: Locataire (styled box)
+      page.drawRectangle({ x: 310, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 10, font });
       
-      yPos -= 100;
+      yPos -= 110;
       
-      // Table header
-      page.drawText('DÉTAIL DES PIÈCES', { x: 40, y: yPos, size: 14, font: fontBold });
-      yPos -= 30;
+      // SECTION HEADER: Détail des pièces
+      page.drawRectangle({ x: 40, y: yPos - 30, width: 515, height: 35, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+      page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 14, font: fontBold, color: colorPrimary });
+      yPos -= 50;
       
       // PAGE 2+: ROOMS TABLE
       for (let i = 0; i < pieces.length; i++) {
@@ -306,12 +339,13 @@ export async function GET(request) {
           yPos = 800;
         }
         
-        // Alternating row colors
-        const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : rgb(0.97, 0.97, 0.97);
-        page.drawRectangle({ x: 40, y: yPos - 60, width: 515, height: 80, color: bgColor });
+        // Alternating row colors with border
+        const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : colorBg;
+        page.drawRectangle({ x: 40, y: yPos - 85, width: 515, height: 95, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
         
-        // Piece name
-        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 15, size: 11, font: fontBold });
+        // Piece name with underline
+        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 20, size: 11, font: fontBold, color: colorPrimary });
+        page.drawLine({ start: { x: 50, y: yPos - 25 }, end: { x: 200, y: yPos - 25 }, thickness: 1, color: colorBorder });
         
         // État
         const etat = d.etat_general || 'Non renseigné';
@@ -391,7 +425,7 @@ export async function GET(request) {
           }
         }
         
-        yPos -= 90;
+        yPos -= 100;
       }
       
       // LAST PAGE: SIGNATURES
