@@ -771,7 +771,7 @@ export async function GET(request) {
         borderWidth: 2 
       });
       
-      // Logo réduit centré dans le bloc
+      // Logo centré dans le bloc
       if (logoImage) {
         page.drawImage(logoImage, { 
           x: blockX + (blockWidth - 60) / 2, 
@@ -781,18 +781,20 @@ export async function GET(request) {
         });
       }
       
-      // Nom de l'application centré
+      // Nom de l'application CENTRÉ (largeur texte ≈ 130px, taille 14)
+      const nomWidth = 130;
       page.drawText('État des Lieux Pro', { 
-        x: blockX + 22, 
+        x: blockX + (blockWidth - nomWidth) / 2, 
         y: blockY + 25, 
         size: 14, 
         font: fontBold, 
         color: colorPrimary 
       });
       
-      // Tagline réduite
+      // Tagline CENTRÉE (largeur texte ≈ 100px, taille 9)
+      const tagWidth = 100;
       page.drawText('Solution certifiée', { 
-        x: blockX + 42, 
+        x: blockX + (blockWidth - tagWidth) / 2, 
         y: blockY + 10, 
         size: 9, 
         font: fontItalic, 
