@@ -93,6 +93,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({});
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [userEmail, setUserEmail] = useState(null); // User session email
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
   const [notification, setNotification] = useState(null);
 
   // Form state for new EDL
@@ -167,11 +169,23 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   }, []);
 
+  // ---- Init: Load user session on mount ----
+  useEffect(() => {
+    const storedEmail = localStorage.getItem('user_email');
+    if (storedEmail) {
+      setUserEmail(storedEmail);
+      fetchEdls(storedEmail);
+    } else {
+      setShowEmailPrompt(true);
+    }
+  }, []);
+
   // ---- Data fetching ----
-  const fetchEdls = useCallback(async () => {
+  const fetchEdls = useCallback(async (email) => {
+    if (!email) return;
     try {
       const cacheBuster = Date.now();
-      const data = await api(`edl?_t=${cacheBuster}`);
+      const data = await api(`edl?email=${encodeURIComponent(email)}&_t=${cacheBuster}`);
       setEdls([...data]); // Force new array reference
     } catch (e) { console.error(e); }
   }, []);
@@ -197,7 +211,7 @@ export default function App() {
   useEffect(() => { fetchEdls(); }, [fetchEdls]);
 
   // ---- Navigation ----
-  const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(); };
+  const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(userEmail); };
   const goToRooms = async (edl) => {
     setCurrentEdl({...edl}); // Force new reference
     const cacheBuster = Date.now();
@@ -349,6 +363,44 @@ export default function App() {
   // ==================== RENDER ====================
   return (
     <div className="min-h-screen bg-[#f4f6f9]">
+      {/* Email Prompt Modal */}
+      {showEmailPrompt && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-2xl font-bold text-[#1e3a5f] mb-2">🏠 État des Lieux Pro</h2>
+            <p className="text-gray-600 mb-5 text-sm">Entrez votre email pour accéder à vos états des lieux</p>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const email = e.target.email.value.trim();
+              if (!email || !email.includes('@')) {
+                showNotif('Email invalide', 'error');
+                return;
+              }
+              localStorage.setItem('user_email', email);
+              setUserEmail(email);
+              setShowEmailPrompt(false);
+              fetchEdls(email);
+            }}>
+              <input
+                type="email"
+                name="email"
+                placeholder="votre@email.com"
+                required
+                autoFocus
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 mb-4 focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+              />
+              <button type="submit"
+                className="w-full bg-[#2d6ac4] hover:bg-[#2560b5] text-white font-bold py-3 rounded-xl transition-all">
+                Accéder à mes états des lieux
+              </button>
+            </form>
+            <p className="text-xs text-gray-500 mt-4 text-center">
+              Vos données sont stockées localement et sécurisées
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Notification */}
       {notification && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all ${notification.type === 'error' ? 'bg-red-500' : 'bg-[#27a96c]'}`}>
@@ -378,11 +430,22 @@ export default function App() {
                 <p className="text-xs text-white/70 mt-0.5">{currentPiece.icon} {currentPiece.nom} — Étape {inspectionStep}/5</p>
               )}
             </div>
-            {view === 'dashboard' && (
-              <button onClick={() => setShowCreateForm(true)}
-                className="bg-[#2d6ac4] hover:bg-[#2560b5] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all">
-                + Nouveau
-              </button>
+            {view === 'dashboard' && userEmail && (
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowCreateForm(true)}
+                  className="bg-[#2d6ac4] hover:bg-[#2560b5] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all">
+                  + Nouveau
+                </button>
+                <button onClick={() => {
+                  localStorage.removeItem('user_email');
+                  setUserEmail(null);
+                  setEdls([]);
+                  setShowEmailPrompt(true);
+                }}
+                  className="text-white/70 hover:text-white text-xs">
+                  🚪
+                </button>
+              </div>
             )}
           </div>
         </header>

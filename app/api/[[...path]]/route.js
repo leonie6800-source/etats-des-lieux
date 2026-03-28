@@ -187,7 +187,11 @@ export async function GET(request) {
 
     // GET /api/edl
     if (segments[0] === 'edl' && !segments[1]) {
-      const edls = await db.collection('edl').find({}).sort({ created_at: -1 }).toArray();
+      // Filter by email if provided (user isolation)
+      const { email } = Object.fromEntries(url.searchParams);
+      const filter = email ? { email_locataire: email } : {};
+      
+      const edls = await db.collection('edl').find(filter).sort({ created_at: -1 }).toArray();
       for (let edl of edls) {
         const pieces = await db.collection('pieces').find({ edl_id: edl.id }).toArray();
         const photos = await db.collection('photos').find({ edl_id: edl.id }).toArray();
