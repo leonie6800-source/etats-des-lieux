@@ -278,9 +278,9 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo as watermark at 8% opacity in center)
+      // WATERMARK (logo as watermark TRÈS GROS - 8% opacity in center)
       if (logoImage) {
-        const watermarkSize = 250;
+        const watermarkSize = 400; // TRÈS GROS
         const watermarkX = (595 - watermarkSize) / 2;
         const watermarkY = (842 - watermarkSize) / 2;
         page.drawImage(logoImage, {
@@ -296,14 +296,14 @@ export async function GET(request) {
       // BANDEAU BLEU en haut
       page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: colorPrimary });
       
-      // LOGO dans le bandeau bleu (left)
+      // LOGO dans le bandeau bleu (left) - GROS
       if (logoImage) {
-        page.drawImage(logoImage, { x: 20, y: 798, width: 40, height: 40 });
+        page.drawImage(logoImage, { x: 15, y: 794, width: 60, height: 60 });
         console.log('✅ Logo added to header');
       }
       
       // Title in bandeau (center-right)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 180, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
       
       // Header line separator (removed - bandeau replaces it)
       
@@ -340,6 +340,21 @@ export async function GET(request) {
         
         if (yPos < 150) {
           page = pdfDoc.addPage([595, 842]);
+          
+          // Add watermark to new page
+          if (logoImage) {
+            const watermarkSize = 400;
+            const watermarkX = (595 - watermarkSize) / 2;
+            const watermarkY = (842 - watermarkSize) / 2;
+            page.drawImage(logoImage, {
+              x: watermarkX,
+              y: watermarkY,
+              width: watermarkSize,
+              height: watermarkSize,
+              opacity: 0.08
+            });
+          }
+          
           yPos = 800;
         }
         
@@ -520,9 +535,9 @@ export async function GET(request) {
       let page = pdfDoc.addPage([595, 842]); // A4 size
       let yPos = 750;
       
-      // WATERMARK (logo as watermark at 8% opacity in center)
+      // WATERMARK (logo as watermark TRÈS GROS - 8% opacity in center)
       if (logoImage) {
-        const watermarkSize = 250;
+        const watermarkSize = 400; // TRÈS GROS
         const watermarkX = (595 - watermarkSize) / 2;
         const watermarkY = (842 - watermarkSize) / 2;
         page.drawImage(logoImage, {
@@ -538,14 +553,14 @@ export async function GET(request) {
       // BANDEAU BLEU en haut
       page.drawRectangle({ x: 0, y: 790, width: 595, height: 52, color: colorPrimary });
       
-      // LOGO dans le bandeau bleu (left)
+      // LOGO dans le bandeau bleu (left) - GROS
       if (logoImage) {
-        page.drawImage(logoImage, { x: 20, y: 798, width: 40, height: 40 });
+        page.drawImage(logoImage, { x: 15, y: 794, width: 60, height: 60 });
         console.log('✅ Logo added to header');
       }
       
       // Title in bandeau (center-right)
-      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 180, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText(`ÉTAT DES LIEUX ${typeEdl}`, { x: 200, y: 815, size: 20, font: fontBold, color: rgb(1, 1, 1) });
       
       // Header line separator (removed - bandeau replaces it)
       
@@ -582,6 +597,21 @@ export async function GET(request) {
         
         if (yPos < 150) {
           page = pdfDoc.addPage([595, 842]);
+          
+          // Add watermark to new page
+          if (logoImage) {
+            const watermarkSize = 400;
+            const watermarkX = (595 - watermarkSize) / 2;
+            const watermarkY = (842 - watermarkSize) / 2;
+            page.drawImage(logoImage, {
+              x: watermarkX,
+              y: watermarkY,
+              width: watermarkSize,
+              height: watermarkSize,
+              opacity: 0.08
+            });
+          }
+          
           yPos = 800;
         }
         
@@ -668,6 +698,21 @@ export async function GET(request) {
       
       // LAST PAGE: SIGNATURES
       page = pdfDoc.addPage([595, 842]);
+      
+      // Add watermark to signature page
+      if (logoImage) {
+        const watermarkSize = 400;
+        const watermarkX = (595 - watermarkSize) / 2;
+        const watermarkY = (842 - watermarkSize) / 2;
+        page.drawImage(logoImage, {
+          x: watermarkX,
+          y: watermarkY,
+          width: watermarkSize,
+          height: watermarkSize,
+          opacity: 0.08
+        });
+      }
+      
       yPos = 750;
       
       page.drawText('SIGNATURES', { x: 250, y: yPos, size: 16, font: fontBold, color: colorPrimary });
@@ -684,6 +729,12 @@ export async function GET(request) {
       page.drawText('Le Propriétaire', { x: 365, y: yPos, size: 11, font: fontBold });
       page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
       page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      
+      // Logo + Nom en bas de page
+      if (logoImage) {
+        page.drawImage(logoImage, { x: 250, y: 100, width: 100, height: 100 });
+      }
+      page.drawText('État des Lieux Pro', { x: 230, y: 80, size: 14, font: fontBold, color: colorPrimary });
       
       // Footer
       page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
