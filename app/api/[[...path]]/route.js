@@ -921,6 +921,7 @@ export async function POST(request) {
         type_edl: body.type_edl || 'Entrée',
         nom_locataire: body.nom_locataire || '',
         nom_proprietaire: body.nom_proprietaire || '',
+        email_locataire: body.email_locataire || '',
         statut: 'en_cours',
         stripe_payment_id: null,
         paid: false,
