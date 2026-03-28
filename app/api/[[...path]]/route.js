@@ -119,6 +119,27 @@ const ADDONS = {
   archive_monthly: { name: 'Archive Sécurisée 10 ans (mensuel)', price: 1.00, recurring: true },
 };
 
+// Get or create Stripe coupon
+async function getOrCreateStripeCoupon(code, percentOff) {
+  try {
+    // Try to retrieve existing coupon
+    const coupon = await stripe.coupons.retrieve(code);
+    return coupon.id;
+  } catch (err) {
+    // Coupon doesn't exist, create it
+    if (err.code === 'resource_missing') {
+      const newCoupon = await stripe.coupons.create({
+        id: code,
+        percent_off: percentOff,
+        duration: 'once',
+        name: `Code promo ${code} - ${percentOff}% OFF`,
+      });
+      return newCoupon.id;
+    }
+    throw err;
+  }
+}
+
 const client = new MongoClient(process.env.MONGO_URL);
 const dbName = process.env.DB_NAME || 'edl_pro';
 
@@ -1312,7 +1333,7 @@ export async function POST(request) {
 
     // POST /api/stripe/checkout - Create Stripe Checkout Session
     if (segments[0] === 'stripe' && segments[1] === 'checkout') {
-      const { plan_code, addons: selectedAddons, edl_id, origin_url } = body;
+      const { plan_code, addons: selectedAddons, edl_id, origin_url, promo_code } = body;
       
       if (!edl_id || !origin_url) {
         return NextResponse.json({ error: 'edl_id and origin_url required' }, { status: 400, headers: corsHeaders() });
@@ -1369,7 +1390,8 @@ export async function POST(request) {
       const cancelUrl = `${origin_url}/?payment_cancel=true&edl_id=${edl_id}`;
 
       try {
-        const session = await stripe.checkout.sessions.create({
+        // Prepare session options
+        const sessionOptions = {
           payment_method_types: ['card'],
           line_items: lineItems,
           mode: planDef.mode === 'subscription' ? 'subscription' : 'payment',
@@ -1383,8 +1405,18 @@ export async function POST(request) {
             has_comparaison_ia: String(hasComparaisonIA),
             has_archive: String(hasArchive),
             customer_email: customerEmail || '',
+            promo_code: promo_code || '',
           },
-        });
+        };
+
+        // Add promo code if provided (TEST100 = 100% discount)
+        if (promo_code === 'TEST100') {
+          sessionOptions.discounts = [{
+            coupon: await getOrCreateStripeCoupon('TEST100', 100),
+          }];
+        }
+
+        const session = await stripe.checkout.sessions.create(sessionOptions);
 
         // Create payment transaction record
         const transaction = {

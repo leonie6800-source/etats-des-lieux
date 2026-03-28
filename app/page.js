@@ -165,15 +165,17 @@ export default function App() {
   // ---- Data fetching ----
   const fetchEdls = useCallback(async () => {
     try {
-      const data = await api('edl');
-      setEdls(data);
+      const cacheBuster = Date.now();
+      const data = await api(`edl?_t=${cacheBuster}`);
+      setEdls([...data]); // Force new array reference
     } catch (e) { console.error(e); }
   }, []);
 
   const fetchPieces = useCallback(async (edlId) => {
     try {
-      const data = await api(`pieces?edl_id=${edlId}`);
-      setPieces(data);
+      const cacheBuster = Date.now();
+      const data = await api(`pieces?edl_id=${edlId}&_t=${cacheBuster}`);
+      setPieces([...data]); // Force new array reference
     } catch (e) { console.error(e); }
   }, []);
 
@@ -192,8 +194,10 @@ export default function App() {
   // ---- Navigation ----
   const goToDashboard = () => { setView('dashboard'); setCurrentEdl(null); fetchEdls(); };
   const goToRooms = async (edl) => {
-    setCurrentEdl(edl);
-    await fetchPieces(edl.id);
+    setCurrentEdl({...edl}); // Force new reference
+    const cacheBuster = Date.now();
+    const piecesData = await api(`pieces?edl_id=${edl.id}&_t=${cacheBuster}`);
+    setPieces([...piecesData]); // Force new reference
     setView('rooms');
   };
   const goToInspection = async (piece) => {
@@ -204,8 +208,10 @@ export default function App() {
     setView('inspection');
   };
   const goToReport = async (edl) => {
-    setCurrentEdl(edl);
-    await fetchPieces(edl.id);
+    setCurrentEdl({...edl}); // Force new reference
+    const cacheBuster = Date.now();
+    const piecesData = await api(`pieces?edl_id=${edl.id}&_t=${cacheBuster}`);
+    setPieces([...piecesData]); // Force new reference
     setView('report');
   };
 
@@ -246,20 +252,24 @@ export default function App() {
       });
       if (nextStep > 5) {
         showNotif('Pièce terminée !');
-        // FORCE REFRESH - Refetch everything
+        // FORCE REFRESH - Refetch everything with cache busters
         if (currentEdl) {
-          // 1. Refresh pieces list
-          const updatedPieces = await api(`pieces?edl_id=${currentEdl.id}`);
-          setPieces(updatedPieces);
+          // 1. Add small delay to ensure DB write is complete
+          await new Promise(resolve => setTimeout(resolve, 300));
           
-          // 2. Refresh EDL to get updated progress
-          const updatedEdls = await api('edl');
-          setEdls(updatedEdls);
+          // 2. Refresh pieces list with cache buster
+          const cacheBuster = Date.now();
+          const updatedPieces = await api(`pieces?edl_id=${currentEdl.id}&_t=${cacheBuster}`);
+          setPieces([...updatedPieces]); // Force new reference
           
-          // 3. Update current EDL with fresh data
+          // 3. Refresh EDL list to get updated progress
+          const updatedEdls = await api(`edl?_t=${cacheBuster}`);
+          setEdls([...updatedEdls]); // Force new reference
+          
+          // 4. Update current EDL with fresh data
           const freshEdl = updatedEdls.find(e => e.id === currentEdl.id);
           if (freshEdl) {
-            setCurrentEdl(freshEdl);
+            setCurrentEdl({...freshEdl}); // Force new reference
           }
         }
         setView('rooms');
@@ -1033,14 +1043,17 @@ function ReportView({ edl, pieces, showNotif }) {
   const [showInvoices, setShowInvoices] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [showPromoInput, setShowPromoInput] = useState(false);
 
   useEffect(() => {
     async function loadPhotos() {
       setLoadingPhotos(true);
       const photoMap = {};
+      const cacheBuster = Date.now();
       for (const piece of (pieces || [])) {
         try {
-          const data = await api(`photos?piece_id=${piece.id}`);
+          const data = await api(`photos?piece_id=${piece.id}&_t=${cacheBuster}`);
           photoMap[piece.id] = data;
         } catch (e) { photoMap[piece.id] = []; }
       }
@@ -1086,6 +1099,7 @@ function ReportView({ edl, pieces, showNotif }) {
           addons,
           edl_id: edl.id,
           origin_url: origin,
+          promo_code: promoCode || undefined,
         }),
       });
       // Redirect to Stripe Checkout
@@ -1419,26 +1433,73 @@ function ReportView({ edl, pieces, showNotif }) {
 
       {/* Total & Payment */}
       {!paid && (
-        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d6ac4] rounded-2xl p-5 text-white">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-white/80 text-sm">{currentPlan.name}</span>
-            <span className="text-sm">{currentPlan.price.toFixed(2)}€</span>
+        <div className="space-y-3">
+          {/* Promo Code Section */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            {!showPromoInput ? (
+              <button onClick={() => setShowPromoInput(true)}
+                className="w-full text-left text-sm text-[#2d6ac4] font-medium flex items-center gap-2">
+                <span>🏷️ J'ai un code promo</span>
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input type="text" value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none uppercase"
+                    placeholder="CODE PROMO" maxLength={20} />
+                  <button onClick={() => {setShowPromoInput(false); setPromoCode('');}}
+                    className="px-3 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs">
+                    ✕
+                  </button>
+                </div>
+                {promoCode === 'TEST100' && (
+                  <div className="text-xs text-green-600 flex items-center gap-1">
+                    ✓ Code valide : 100% de réduction appliquée !
+                  </div>
+                )}
+                {promoCode && promoCode !== 'TEST100' && (
+                  <div className="text-xs text-orange-600 flex items-center gap-1">
+                    ⚠️ Code non reconnu
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {addonsTotal > 0 && (
-            <div className="flex justify-between items-center mb-3 text-sm">
-              <span className="text-white/80">Options</span>
-              <span>+{addonsTotal.toFixed(2)}€</span>
+
+          {/* Total Card */}
+          <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2d6ac4] rounded-2xl p-5 text-white">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-white/80 text-sm">{currentPlan.name}</span>
+              <span className="text-sm">{currentPlan.price.toFixed(2)}€</span>
             </div>
-          )}
-          <div className="border-t border-white/20 pt-3 mb-4 flex justify-between items-center">
-            <span className="font-bold text-lg">Total</span>
-            <span className="font-bold text-2xl">{totalPrice.toFixed(2)}€</span>
+            {addonsTotal > 0 && (
+              <div className="flex justify-between items-center mb-3 text-sm">
+                <span className="text-white/80">Options</span>
+                <span>+{addonsTotal.toFixed(2)}€</span>
+              </div>
+            )}
+            {promoCode === 'TEST100' && (
+              <div className="flex justify-between items-center mb-3 text-sm">
+                <span className="text-white/80">Code promo TEST100</span>
+                <span className="text-green-300">-100%</span>
+              </div>
+            )}
+            <div className="border-t border-white/20 pt-3 mb-4 flex justify-between items-center">
+              <span className="font-bold text-lg">Total</span>
+              <span className="font-bold text-2xl">
+                {promoCode === 'TEST100' ? (
+                  <><span className="line-through text-base opacity-50">{totalPrice.toFixed(2)}€</span> <span className="text-green-300">0€</span></>
+                ) : (
+                  `${totalPrice.toFixed(2)}€`
+                )}
+              </span>
+            </div>
+            <button onClick={handlePayment} disabled={paying}
+              className="w-full bg-white text-[#1e3a5f] font-bold py-3.5 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all text-sm">
+              {paying ? '⏳ Redirection vers Stripe...' : (promoCode === 'TEST100' ? `✅ Débloquer gratuitement` : `💳 Payer ${totalPrice.toFixed(2)}€`)}
+            </button>
+            <p className="text-[10px] text-white/50 text-center mt-2">Paiement sécurisé par Stripe</p>
           </div>
-          <button onClick={handlePayment} disabled={paying}
-            className="w-full bg-white text-[#1e3a5f] font-bold py-3.5 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all text-sm">
-            {paying ? '⏳ Redirection vers Stripe...' : `💳 Payer ${totalPrice.toFixed(2)}€`}
-          </button>
-          <p className="text-[10px] text-white/50 text-center mt-2">Paiement sécurisé par Stripe</p>
         </div>
       )}
 
