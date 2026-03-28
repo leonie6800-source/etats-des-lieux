@@ -1050,6 +1050,10 @@ function ReportView({ edl, pieces, showNotif }) {
   const [openingPortal, setOpeningPortal] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [showPromoInput, setShowPromoInput] = useState(false);
+  const [downloadToken, setDownloadToken] = useState(edl?.download_token || null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     async function loadPhotos() {
@@ -1067,6 +1071,20 @@ function ReportView({ edl, pieces, showNotif }) {
     }
     loadPhotos();
   }, [pieces]);
+
+  // Sync paid state when edl changes (after payment)
+  useEffect(() => {
+    if (edl?.paid !== undefined) {
+      setPaid(edl.paid);
+    }
+  }, [edl?.paid]);
+
+  // Sync downloadToken when edl changes
+  useEffect(() => {
+    if (edl?.download_token) {
+      setDownloadToken(edl.download_token);
+    }
+  }, [edl?.download_token]);
 
   useEffect(() => {
     async function loadInvoices() {
@@ -1177,11 +1195,6 @@ function ReportView({ edl, pieces, showNotif }) {
       setGenerating(false);
     }
   };
-
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [emailTo, setEmailTo] = useState('');
-  const [sendingEmail, setSendingEmail] = useState(false);
-  const [downloadToken, setDownloadToken] = useState(edl?.download_token || null);
 
   const shareWhatsApp = () => {
     const text = encodeURIComponent(`Etat des lieux - ${edl.adresse}\nType: ${edl.type_edl}\nLocataire: ${edl.nom_locataire}\nProprietaire: ${edl.nom_proprietaire}\nDate: ${new Date().toLocaleDateString('fr-FR')}`);
