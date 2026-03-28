@@ -1044,7 +1044,9 @@ export async function POST(request) {
 
     // ============ PROTECTED ROUTES (require auth) ============
     const authUser = getUserFromRequest(request);
-    if (!authUser && !segments[0]?.startsWith('stripe')) { // Allow stripe webhooks without auth
+    // Allow stripe webhooks and admin endpoints without auth
+    const publicEndpoints = segments[0]?.startsWith('stripe') || segments[0] === 'admin';
+    if (!authUser && !publicEndpoints) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
     }
 
