@@ -1691,9 +1691,43 @@ function ReportView({ edl, pieces, showNotif }) {
             <span className="font-bold text-2xl">{totalPrice.toFixed(2)}€</span>
           </div>
           <button onClick={handlePayment} disabled={paying}
-            className="w-full bg-white text-[#1e3a5f] font-bold py-3.5 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all text-sm">
+            className="w-full bg-white text-[#1e3a5f] font-bold py-3.5 rounded-xl hover:bg-gray-100 disabled:opacity-50 transition-all text-sm mb-3">
             {paying ? '⏳ Redirection vers Stripe...' : `💳 Payer ${totalPrice.toFixed(2)}€`}
           </button>
+          
+          {/* Code Promo TEST100 */}
+          <button onClick={async () => {
+            const promo = prompt('Entrez votre code promo :');
+            if (promo && promo.toUpperCase() === 'TEST100') {
+              try {
+                const result = await api('admin/unlock', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    edl_id: edl.id,
+                    admin_key: 'edl_admin_2026_test'
+                  }),
+                });
+                if (result.success) {
+                  showNotif('🎉 Code promo validé ! Rapport débloqué gratuitement !');
+                  // Refresh EDL data
+                  const cacheBuster = Date.now();
+                  const freshEdl = await api(`edl/${edl.id}?_t=${cacheBuster}`);
+                  setCurrentEdl({...freshEdl, _refreshKey: cacheBuster});
+                  fetchEdls();
+                } else {
+                  showNotif('Erreur lors de l\'activation du code promo', 'error');
+                }
+              } catch (e) {
+                showNotif('Code promo invalide', 'error');
+              }
+            } else if (promo) {
+              showNotif('Code promo invalide', 'error');
+            }
+          }}
+            className="w-full bg-white/10 text-white border border-white/30 font-medium py-2.5 rounded-xl hover:bg-white/20 transition-all text-xs">
+            🎁 J'ai un code promo
+          </button>
+          
           <p className="text-[10px] text-white/50 text-center mt-2">Paiement sécurisé par Stripe</p>
         </div>
       )}
