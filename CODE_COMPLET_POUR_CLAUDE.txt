@@ -1,0 +1,62 @@
+================================================================================
+ÉTAT DES LIEUX PRO - CODE COMPLET POUR CLAUDE
+================================================================================
+
+📱 Application Next.js PWA d'inspection immobilière
+🌐 Production: https://property-inspect-16.emergent.host
+🔧 Preview: https://property-inspect-16.preview.emergentagent.com
+
+================================================================================
+CONTEXTE & ARCHITECTURE
+================================================================================
+
+Stack Technique:
+- Frontend: Next.js 15 + React + Tailwind CSS + PWA
+- Backend: Next.js API Routes (App Router)
+- Database: MongoDB
+- Payments: Stripe (LIVE mode)
+- Email: Resend
+- AI: OpenAI (GPT-4o-mini + Whisper + Vision)
+- Images: Cloudinary
+- Auth: JWT + bcrypt
+
+Architecture Monolithique (2 fichiers principaux):
+- /app/app/page.js (2103 lignes - TOUT le frontend)
+- /app/app/api/[[...path]]/route.js (1883 lignes - TOUTE l'API)
+
+Fonctionnalités:
+✅ Auth JWT multi-utilisateurs isolés
+✅ Création EDL (T1-T4)
+✅ Inspection pièce par pièce (5 étapes)
+✅ Upload photos + tri IA automatique
+✅ Notes vocales → texte (Whisper)
+✅ Paiements Stripe (9.90€, 49€/mois, 149€/mois)
+✅ Génération PDF serveur (pdf-lib)
+✅ Envoi email auto (Resend)
+✅ Code promo TEST100 (déblocage gratuit)
+✅ PWA installable
+
+Problèmes à résoudre:
+⚠️ Code très monolithique
+⚠️ Photos stockées en Base64 au lieu de Cloudinary URLs
+⚠️ Cache frontend après paiement
+
+Identifiants de test:
+- Email: leonie6800@gmail.com
+- Password: Mobile123
+- Code promo: TEST100
+- Admin key: edl_admin_2026_test
+
+DB Schema MongoDB:
+- users: {id, email, password(bcrypt), nom, created_at}
+- edl: {id, user_id, adresse, type_logement, paid, download_token}
+- pieces: {id, edl_id, nom, statut, donnees_json}
+- photos: {id, piece_id, edl_id, url(Cloudinary), data(Base64)}
+
+================================================================================
+FICHIERS PRINCIPAUX
+================================================================================
+
+Ci-dessous, les fichiers complets de l'application.
+Pour les partager avec Claude, copiez tout ce document.
+
