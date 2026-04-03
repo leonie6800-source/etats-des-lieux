@@ -250,8 +250,11 @@ export async function GET(request) {
 
     // GET /api/edl/:id
     if (segments[0] === 'edl' && segments[1]) {
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const edl = await db.collection('edl').findOne({ id: segments[1] });
       if (!edl) return NextResponse.json({ error: 'EDL not found' }, { status: 404, headers: corsHeaders() });
+      if (edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       const pieces = await db.collection('pieces').find({ edl_id: edl.id }).toArray();
       const photos = await db.collection('photos').find({ edl_id: edl.id }).toArray();
       edl.pieces = pieces;
@@ -263,8 +266,12 @@ export async function GET(request) {
 
     // GET /api/pieces?edl_id=xxx
     if (segments[0] === 'pieces' && !segments[1]) {
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const edl_id = url.searchParams.get('edl_id');
       if (!edl_id) return NextResponse.json({ error: 'edl_id required' }, { status: 400, headers: corsHeaders() });
+      const edl = await db.collection('edl').findOne({ id: edl_id });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       const pieces = await db.collection('pieces').find({ edl_id }).toArray();
       for (let piece of pieces) {
         const photos = await db.collection('photos').find({ piece_id: piece.id }).toArray();
@@ -275,41 +282,59 @@ export async function GET(request) {
 
     // GET /api/pieces/:id
     if (segments[0] === 'pieces' && segments[1]) {
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const piece = await db.collection('pieces').findOne({ id: segments[1] });
       if (!piece) return NextResponse.json({ error: 'Piece not found' }, { status: 404, headers: corsHeaders() });
+      const edl = await db.collection('edl').findOne({ id: piece.edl_id });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       return NextResponse.json(piece, { headers: corsHeaders() });
     }
 
     // GET /api/photos?piece_id=xxx or edl_id=xxx
     if (segments[0] === 'photos' && !segments[1]) {
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const piece_id = url.searchParams.get('piece_id');
       const edl_id = url.searchParams.get('edl_id');
+      if (!piece_id && !edl_id) return NextResponse.json({ error: 'piece_id ou edl_id requis' }, { status: 400, headers: corsHeaders() });
+      const lookupId = edl_id || (await db.collection('pieces').findOne({ id: piece_id }))?.edl_id;
+      const edl = await db.collection('edl').findOne({ id: lookupId });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       let query = {};
       if (piece_id) query.piece_id = piece_id;
       if (edl_id) query.edl_id = edl_id;
       const photos = await db.collection('photos').find(query).sort({ created_at: 1 }).toArray();
-      // Return without base64 data for listing (lighter)
       const photosLight = photos.map(p => ({ ...p, data: p.data ? p.data.substring(0, 50) + '...' : null, has_data: !!p.data }));
-      return NextResponse.json(photos, { headers: corsHeaders() });
+      return NextResponse.json(photosLight, { headers: corsHeaders() });
     }
 
     // GET /api/photos/:id
     if (segments[0] === 'photos' && segments[1]) {
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const photo = await db.collection('photos').findOne({ id: segments[1] });
       if (!photo) return NextResponse.json({ error: 'Photo not found' }, { status: 404, headers: corsHeaders() });
+      const edl = await db.collection('edl').findOne({ id: photo.edl_id });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       return NextResponse.json(photo, { headers: corsHeaders() });
     }
 
     // GET /api/invoices
     if (segments[0] === 'invoices' && !segments[1]) {
-      const invoices = await db.collection('invoices').find({}).sort({ created_at: -1 }).toArray();
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+      const invoices = await db.collection('invoices').find({ user_id: authUser.userId }).sort({ created_at: -1 }).toArray();
       return NextResponse.json(invoices, { headers: corsHeaders() });
     }
 
     // GET /api/invoices/:id
     if (segments[0] === 'invoices' && segments[1]) {
+      const authUser = getUserFromRequest(request);
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const invoice = await db.collection('invoices').findOne({ id: segments[1] });
       if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404, headers: corsHeaders() });
+      if (invoice.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       return NextResponse.json(invoice, { headers: corsHeaders() });
     }
 
@@ -365,19 +390,19 @@ export async function GET(request) {
         piece.photos = photos;
       }
       
+      // Create PDF with pdf-lib
+      const pdfDoc = await PDFDocument.create();
+
       // Load logo
-      const logoPath = '/tmp/logo-edl-pro.png';
       let logoImage = null;
       try {
-        const fs = require('fs');
+        const fs = (await import('fs')).default;
+        const logoPath = '/tmp/logo-edl-pro.png';
         const logoBytes = fs.readFileSync(logoPath);
         logoImage = await pdfDoc.embedPng(logoBytes);
       } catch (err) {
         console.error('Logo not found, continuing without it');
       }
-      
-      // Create PDF with pdf-lib
-      const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
       const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
       const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
@@ -982,8 +1007,8 @@ export async function POST(request) {
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       
       if (!webhookSecret) {
-        console.warn('⚠️  STRIPE_WEBHOOK_SECRET not configured');
-        return NextResponse.json({ received: true }, { headers: corsHeaders() });
+        console.error('❌ STRIPE_WEBHOOK_SECRET non configuré - webhook rejeté');
+        return NextResponse.json({ error: 'Webhook non configuré' }, { status: 500, headers: corsHeaders() });
       }
 
       try {
@@ -1626,6 +1651,9 @@ export async function POST(request) {
 
     // POST /api/stripe/status - Check payment status & finalize
     if (segments[0] === 'stripe' && segments[1] === 'status') {
+      if (!authUser) {
+        return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+      }
       const { session_id } = body;
       if (!session_id) {
         return NextResponse.json({ error: 'session_id required' }, { status: 400, headers: corsHeaders() });
@@ -1729,13 +1757,19 @@ export async function POST(request) {
       }
     }
 
-    // POST /api/admin/unlock - ADMIN: Unlock EDL without payment (for testing)
+    // POST /api/admin/unlock - Unlock EDL via promo code or admin key
     if (segments[0] === 'admin' && segments[1] === 'unlock') {
-      const { edl_id, admin_key } = body;
-      
-      // Simple admin key check (change this in production!)
-      if (admin_key !== 'edl_admin_2026_test') {
-        return NextResponse.json({ error: 'Clé admin invalide' }, { status: 403, headers: corsHeaders() });
+      const { edl_id, promo_code, admin_key } = body;
+
+      const validAdminKey = process.env.ADMIN_KEY;
+      const validPromoCodes = (process.env.PROMO_CODES || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+
+      const submittedCode = (promo_code || admin_key || '').toUpperCase();
+      const isValid = (validAdminKey && submittedCode === validAdminKey.toUpperCase()) ||
+                      (validPromoCodes.length > 0 && validPromoCodes.includes(submittedCode));
+
+      if (!isValid) {
+        return NextResponse.json({ error: 'Code invalide' }, { status: 403, headers: corsHeaders() });
       }
       
       if (!edl_id) {
@@ -1814,8 +1848,14 @@ export async function PUT(request) {
     const segments = getPathSegments(request);
     const body = await request.json();
 
+    const authUser = getUserFromRequest(request);
+    if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+
     // PUT /api/edl/:id
     if (segments[0] === 'edl' && segments[1]) {
+      const existing = await db.collection('edl').findOne({ id: segments[1] });
+      if (!existing) return NextResponse.json({ error: 'EDL not found' }, { status: 404, headers: corsHeaders() });
+      if (existing.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       const { id, _id, ...updateData } = body;
       await db.collection('edl').updateOne({ id: segments[1] }, { $set: updateData });
       const updated = await db.collection('edl').findOne({ id: segments[1] });
@@ -1824,6 +1864,10 @@ export async function PUT(request) {
 
     // PUT /api/pieces/:id
     if (segments[0] === 'pieces' && segments[1]) {
+      const piece = await db.collection('pieces').findOne({ id: segments[1] });
+      if (!piece) return NextResponse.json({ error: 'Piece not found' }, { status: 404, headers: corsHeaders() });
+      const edl = await db.collection('edl').findOne({ id: piece.edl_id });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       const { id, _id, ...updateData } = body;
       await db.collection('pieces').updateOne({ id: segments[1] }, { $set: updateData });
       const updated = await db.collection('pieces').findOne({ id: segments[1] });
@@ -1832,6 +1876,10 @@ export async function PUT(request) {
 
     // PUT /api/photos/:id
     if (segments[0] === 'photos' && segments[1]) {
+      const photo = await db.collection('photos').findOne({ id: segments[1] });
+      if (!photo) return NextResponse.json({ error: 'Photo not found' }, { status: 404, headers: corsHeaders() });
+      const edl = await db.collection('edl').findOne({ id: photo.edl_id });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       const { id, _id, ...updateData } = body;
       await db.collection('photos').updateOne({ id: segments[1] }, { $set: updateData });
       return NextResponse.json({ success: true }, { headers: corsHeaders() });
@@ -1849,10 +1897,16 @@ export async function DELETE(request) {
     const db = await getDb();
     const segments = getPathSegments(request);
 
+    const authUser = getUserFromRequest(request);
+    if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+
     // DELETE /api/photos/:id
     if (segments[0] === 'photos' && segments[1]) {
       const photo = await db.collection('photos').findOne({ id: segments[1] });
-      if (photo?.public_id) {
+      if (!photo) return NextResponse.json({ error: 'Photo not found' }, { status: 404, headers: corsHeaders() });
+      const edl = await db.collection('edl').findOne({ id: photo.edl_id });
+      if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
+      if (photo.public_id) {
         await deleteFromCloudinary(photo.public_id);
       }
       await db.collection('photos').deleteOne({ id: segments[1] });
@@ -1861,7 +1915,9 @@ export async function DELETE(request) {
 
     // DELETE /api/edl/:id
     if (segments[0] === 'edl' && segments[1]) {
-      // Delete all photos from Cloudinary first
+      const edl = await db.collection('edl').findOne({ id: segments[1] });
+      if (!edl) return NextResponse.json({ error: 'EDL not found' }, { status: 404, headers: corsHeaders() });
+      if (edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       const photos = await db.collection('photos').find({ edl_id: segments[1] }).toArray();
       for (const photo of photos) {
         if (photo.public_id) {

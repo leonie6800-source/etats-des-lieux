@@ -1695,32 +1695,28 @@ function ReportView({ edl, pieces, showNotif }) {
             {paying ? '⏳ Redirection vers Stripe...' : `💳 Payer ${totalPrice.toFixed(2)}€`}
           </button>
           
-          {/* Code Promo TEST100 */}
+          {/* Code Promo */}
           <button onClick={async () => {
             const promo = prompt('Entrez votre code promo :');
-            if (promo && promo.toUpperCase() === 'TEST100') {
-              try {
-                const result = await api('admin/unlock', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    edl_id: edl.id,
-                    admin_key: 'edl_admin_2026_test'
-                  }),
-                });
-                if (result.success) {
-                  showNotif('🎉 Code promo validé ! Rapport débloqué gratuitement !');
-                  // Refresh EDL data
-                  const cacheBuster = Date.now();
-                  const freshEdl = await api(`edl/${edl.id}?_t=${cacheBuster}`);
-                  setCurrentEdl({...freshEdl, _refreshKey: cacheBuster});
-                  fetchEdls();
-                } else {
-                  showNotif('Erreur lors de l\'activation du code promo', 'error');
-                }
-              } catch (e) {
+            if (!promo) return;
+            try {
+              const result = await api('admin/unlock', {
+                method: 'POST',
+                body: JSON.stringify({
+                  edl_id: edl.id,
+                  promo_code: promo.trim(),
+                }),
+              });
+              if (result.success) {
+                showNotif('🎉 Code promo validé ! Rapport débloqué gratuitement !');
+                const cacheBuster = Date.now();
+                const freshEdl = await api(`edl/${edl.id}?_t=${cacheBuster}`);
+                setCurrentEdl({...freshEdl, _refreshKey: cacheBuster});
+                fetchEdls();
+              } else {
                 showNotif('Code promo invalide', 'error');
               }
-            } else if (promo) {
+            } catch (e) {
               showNotif('Code promo invalide', 'error');
             }
           }}
