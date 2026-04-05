@@ -9,8 +9,16 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+let _openai = null;
+let _stripe = null;
+function getOpenAI() {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
+function getStripe() {
+  if (!_stripe) _stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  return _stripe;
+}
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -1013,7 +1021,7 @@ export async function POST(request) {
 
       try {
         const rawBody = await request.text();
-        const event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+        const event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret);
 
         console.log(`🔔 Stripe Webhook: ${event.type}`);
 
@@ -1324,7 +1332,7 @@ export async function POST(request) {
       const pieceNames = (available_pieces || []).join(', ');
 
       try {
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             {
@@ -1395,7 +1403,7 @@ export async function POST(request) {
       const results = [];
       for (const photoData of photosList) {
         try {
-          const response = await openai.chat.completions.create({
+          const response = await getOpenAI().chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
               {
@@ -1504,7 +1512,7 @@ export async function POST(request) {
 
         // Transcribe with Whisper
         const file = await toFile(buffer, `audio.${ext}`, { type: mimeType });
-        const transcription = await openai.audio.transcriptions.create({
+        const transcription = await getOpenAI().audio.transcriptions.create({
           file,
           model: 'whisper-1',
           language: language || 'fr',
@@ -1514,7 +1522,7 @@ export async function POST(request) {
         const rawText = typeof transcription === 'string' ? transcription : transcription.text || '';
 
         // Clean up with GPT-4o-mini
-        const cleanResponse = await openai.chat.completions.create({
+        const cleanResponse = await getOpenAI().chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             {
@@ -1605,7 +1613,7 @@ export async function POST(request) {
       const cancelUrl = `${origin_url}/?payment_cancel=true&edl_id=${edl_id}`;
 
       try {
-        const session = await stripe.checkout.sessions.create({
+        const session = await getStripe().checkout.sessions.create({
           payment_method_types: ['card'],
           line_items: lineItems,
           mode: planDef.mode === 'subscription' ? 'subscription' : 'payment',
@@ -1660,7 +1668,7 @@ export async function POST(request) {
       }
 
       try {
-        const session = await stripe.checkout.sessions.retrieve(session_id);
+        const session = await getStripe().checkout.sessions.retrieve(session_id);
         const transaction = await db.collection('payment_transactions').findOne({ session_id });
 
         console.log(`🔍 Stripe Session Check: status=${session.status}, payment_status=${session.payment_status}, amount=${session.amount_total}`);
@@ -1823,7 +1831,7 @@ export async function POST(request) {
       }
 
       try {
-        const session = await stripe.billingPortal.sessions.create({
+        const session = await getStripe().billingPortal.sessions.create({
           customer: customer_id,
           return_url: return_url,
         });
