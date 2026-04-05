@@ -896,7 +896,7 @@ export async function GET(request) {
 
         let yLine = yPos - 54;
 
-        const T = 60;
+        const T = 68;
         if (murStr) { page.drawText(pdfText(`Murs: ${murStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_murs) {
@@ -917,9 +917,14 @@ export async function GET(request) {
 
         if (equips.length > 0) {
           const equipStr = equips.join(' | ');
-          const equipTrunc = equipStr.length > T ? equipStr.substring(0, T) + '...' : equipStr;
-          page.drawText(pdfText(`Equip.: ${equipTrunc}`), { x: 50, y: yLine, size: 9, font });
+          const line1 = equipStr.substring(0, T);
+          const line2 = equipStr.length > T ? equipStr.substring(T, T * 2) : '';
+          page.drawText(pdfText(`Equip.: ${line1}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
+          if (line2) {
+            page.drawText(pdfText(`  ${line2}${equipStr.length > T * 2 ? '...' : ''}`), { x: 50, y: yLine, size: 9, font });
+            yLine -= 13;
+          }
         }
         if (d.obs_equipements) {
           const obs = d.obs_equipements.length > T ? d.obs_equipements.substring(0, T) + '...' : d.obs_equipements;
