@@ -41,10 +41,8 @@ async function sendEmail(toEmail, edl, downloadToken) {
   try {
     // Check if Resend API key is configured
     if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 'VOTRE_CLE_RESEND_ICI') {
-      console.warn('⚠️  Resend API key not configured. Email NOT sent.');
-      console.warn(`📧 Would send to: ${toEmail}`);
-      console.warn(`📥 PDF link: ${downloadLink}`);
-      return false; // Return false but don't throw error
+      console.error('❌ RESEND_API_KEY non configuré');
+      throw new Error('Service email non configuré');
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY);
@@ -95,7 +93,7 @@ async function sendEmail(toEmail, edl, downloadToken) {
     return true;
   } catch (error) {
     console.error('sendEmail Error:', error.message);
-    return false;
+    throw error;
   }
 }
 
@@ -1773,12 +1771,8 @@ export async function POST(request) {
       if (!edl || edl.user_id !== authUser.userId) {
         return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       }
-      const sent = await sendEmail(to, edl, download_token);
-      if (sent) {
-        return NextResponse.json({ success: true }, { headers: corsHeaders() });
-      } else {
-        return NextResponse.json({ error: 'Erreur envoi email' }, { status: 500, headers: corsHeaders() });
-      }
+      await sendEmail(to, edl, download_token);
+      return NextResponse.json({ success: true }, { headers: corsHeaders() });
     }
 
     // POST /api/admin/unlock - Unlock EDL via promo code or admin key
