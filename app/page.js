@@ -635,7 +635,7 @@ export default function App() {
               piece={currentPiece} step={inspectionStep} setStep={setInspectionStep}
               formData={formData} saveInspection={saveInspection}
               photos={photos} uploadPhoto={uploadPhoto} deletePhoto={deletePhoto}
-              edl={currentEdl}
+              edl={currentEdl} showNotif={showNotif}
             />
           )}
           {view === 'report' && (
@@ -877,7 +877,7 @@ function RoomsView({ edl, pieces, goToInspection, goToReport, addCustomRoom, sho
 }
 
 // ==================== INSPECTION VIEW ====================
-function InspectionView({ piece, step, setStep, formData, saveInspection, photos, uploadPhoto, deletePhoto, edl }) {
+function InspectionView({ piece, step, setStep, formData, saveInspection, photos, uploadPhoto, deletePhoto, edl, showNotif }) {
   const [localData, setLocalData] = useState(formData || {});
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
