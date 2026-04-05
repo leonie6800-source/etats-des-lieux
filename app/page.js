@@ -1295,6 +1295,8 @@ function ReportView({ edl, pieces, showNotif }) {
   const [addons, setAddons] = useState({ comparaison_ia: false, archive_securisee: false, archive_type: 'one_time' });
   const [showInvoices, setShowInvoices] = useState(false);
   const [invoices, setInvoices] = useState([]);
+  const [showEditEdl, setShowEditEdl] = useState(false);
+  const [editEdlData, setEditEdlData] = useState({});
   const [openingPortal, setOpeningPortal] = useState(false);
   const [downloadToken, setDownloadToken] = useState(edl?.download_token || null);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -1524,8 +1526,64 @@ function ReportView({ edl, pieces, showNotif }) {
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-[#1e3a5f]">📋 Récapitulatif</h2>
-          <button onClick={() => setShowInvoices(true)} className="text-xs text-[#2d6ac4] font-medium border border-[#2d6ac4] px-3 py-1 rounded-full">🧾 Factures</button>
+          <div className="flex gap-2">
+            <button onClick={() => { setEditEdlData({ adresse: edl.adresse || '', code_postal: edl.code_postal || '', ville: edl.ville || '', nom_locataire: edl.nom_locataire || '', nom_proprietaire: edl.nom_proprietaire || '', email_locataire: edl.email_locataire || '' }); setShowEditEdl(true); }}
+              className="text-xs text-gray-600 font-medium border border-gray-300 px-3 py-1 rounded-full hover:bg-gray-50">✏️ Modifier</button>
+            <button onClick={() => setShowInvoices(true)} className="text-xs text-[#2d6ac4] font-medium border border-[#2d6ac4] px-3 py-1 rounded-full">🧾 Factures</button>
+          </div>
         </div>
+
+        {/* Edit EDL Modal */}
+        {showEditEdl && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowEditEdl(false)}>
+            <div className="bg-white w-full max-w-[480px] rounded-t-2xl sm:rounded-2xl p-6 space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
+              <h3 className="font-bold text-[#1e3a5f] text-lg">✏️ Modifier l'EDL</h3>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Adresse</label>
+                <input type="text" value={editEdlData.adresse} onChange={e => setEditEdlData({...editEdlData, adresse: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Code postal</label>
+                  <input type="text" value={editEdlData.code_postal} onChange={e => setEditEdlData({...editEdlData, code_postal: e.target.value})}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" placeholder="75001" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Ville</label>
+                  <input type="text" value={editEdlData.ville} onChange={e => setEditEdlData({...editEdlData, ville: e.target.value})}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" placeholder="Paris" />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Locataire</label>
+                <input type="text" value={editEdlData.nom_locataire} onChange={e => setEditEdlData({...editEdlData, nom_locataire: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Propriétaire</label>
+                <input type="text" value={editEdlData.nom_proprietaire} onChange={e => setEditEdlData({...editEdlData, nom_proprietaire: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Email locataire</label>
+                <input type="email" value={editEdlData.email_locataire} onChange={e => setEditEdlData({...editEdlData, email_locataire: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowEditEdl(false)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm">Annuler</button>
+                <button onClick={async () => {
+                  try {
+                    const updated = await api('edl/' + edl.id, { method: 'PUT', body: JSON.stringify(editEdlData) });
+                    setCurrentEdl(updated);
+                    setShowEditEdl(false);
+                    showNotif('EDL mis à jour !');
+                  } catch (e) { showNotif(e.message, 'error'); }
+                }} className="flex-1 py-3 rounded-xl bg-[#1e3a5f] text-white font-semibold text-sm">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Adresse</span>

@@ -572,49 +572,49 @@ export async function GET(request) {
 
         let yLine = yPos - 54;
 
-        // Murs + Plafond
-        if (murStr) page.drawText(pdfText(`Murs: ${murStr}`), { x: 50, y: yLine, size: 9, font });
-        if (plafondStr) page.drawText(pdfText(`Plafond: ${plafondStr}`), { x: 280, y: yLine, size: 9, font });
-        if (murStr || plafondStr) yLine -= 13;
+        const T = 60; // max chars to avoid photo overlap (photo starts at x=415)
+        // Murs then Plafond on separate lines
+        if (murStr) { page.drawText(pdfText(`Murs: ${murStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
+        if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_murs) {
-          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '...' : d.obs_murs;
+          const obs = d.obs_murs.length > T ? d.obs_murs.substring(0, T) + '...' : d.obs_murs;
           page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         // Sol
         if (solStr) {
-          page.drawText(pdfText(`Sol: ${solStr}`), { x: 50, y: yLine, size: 9, font });
+          page.drawText(pdfText(`Sol: ${solStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_sol) {
-          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '...' : d.obs_sol;
+          const obs = d.obs_sol.length > T ? d.obs_sol.substring(0, T) + '...' : d.obs_sol;
           page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
-        // Équipements
+        // Equipements
         if (equips.length > 0) {
           const equipStr = equips.join(' | ');
-          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '...' : equipStr;
+          const equipTrunc = equipStr.length > T ? equipStr.substring(0, T) + '...' : equipStr;
           page.drawText(pdfText(`Equip.: ${equipTrunc}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_equipements) {
-          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '...' : d.obs_equipements;
+          const obs = d.obs_equipements.length > T ? d.obs_equipements.substring(0, T) + '...' : d.obs_equipements;
           page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
-        // Observations générales (IA)
+        // Observations generales (IA)
         if (d.observations_generales) {
-          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '...' : d.observations_generales;
+          const obs = d.observations_generales.length > T ? d.observations_generales.substring(0, T) + '...' : d.observations_generales;
           page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
         }
 
-        // Photo thumbnail (right side)
+        // Photo thumbnail (right side, x=415 so no overlap)
         if (photos.length > 0) {
-          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 415, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
           if (photos[0].url) {
             try {
               let imageUrl = photos[0].url;
@@ -890,45 +890,45 @@ export async function GET(request) {
 
         let yLine = yPos - 54;
 
-        if (murStr) page.drawText(pdfText(`Murs: ${murStr}`), { x: 50, y: yLine, size: 9, font });
-        if (plafondStr) page.drawText(pdfText(`Plafond: ${plafondStr}`), { x: 280, y: yLine, size: 9, font });
-        if (murStr || plafondStr) yLine -= 13;
+        const T = 60;
+        if (murStr) { page.drawText(pdfText(`Murs: ${murStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
+        if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_murs) {
-          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '...' : d.obs_murs;
+          const obs = d.obs_murs.length > T ? d.obs_murs.substring(0, T) + '...' : d.obs_murs;
           page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         if (solStr) {
-          page.drawText(pdfText(`Sol: ${solStr}`), { x: 50, y: yLine, size: 9, font });
+          page.drawText(pdfText(`Sol: ${solStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_sol) {
-          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '...' : d.obs_sol;
+          const obs = d.obs_sol.length > T ? d.obs_sol.substring(0, T) + '...' : d.obs_sol;
           page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         if (equips.length > 0) {
           const equipStr = equips.join(' | ');
-          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '...' : equipStr;
+          const equipTrunc = equipStr.length > T ? equipStr.substring(0, T) + '...' : equipStr;
           page.drawText(pdfText(`Equip.: ${equipTrunc}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_equipements) {
-          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '...' : d.obs_equipements;
+          const obs = d.obs_equipements.length > T ? d.obs_equipements.substring(0, T) + '...' : d.obs_equipements;
           page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         if (d.observations_generales) {
-          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '...' : d.observations_generales;
+          const obs = d.observations_generales.length > T ? d.observations_generales.substring(0, T) + '...' : d.observations_generales;
           page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
         }
 
-        // Photo thumbnail
+        // Photo thumbnail (right side x=415)
         if (photos.length > 0) {
-          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 415, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
           const firstPhoto = photos[0];
           if (firstPhoto.url || firstPhoto.data) {
             try {
