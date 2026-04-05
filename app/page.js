@@ -639,7 +639,7 @@ export default function App() {
             />
           )}
           {view === 'report' && (
-            <ReportView edl={currentEdl} pieces={pieces} showNotif={showNotif} />
+            <ReportView edl={currentEdl} pieces={pieces} showNotif={showNotif} onEdlUpdate={setCurrentEdl} />
           )}
         </main>
       </div>
@@ -1281,7 +1281,7 @@ function StepButtons({ step, onPrev, onNext, nextLabel }) {
 }
 
 // ==================== REPORT VIEW ====================
-function ReportView({ edl, pieces, showNotif }) {
+function ReportView({ edl, pieces, showNotif, onEdlUpdate }) {
   const [generating, setGenerating] = useState(false);
   const [paid, setPaid] = useState(edl?.paid || false);
   const [paying, setPaying] = useState(false);
@@ -1575,7 +1575,7 @@ function ReportView({ edl, pieces, showNotif }) {
                 <button onClick={async () => {
                   try {
                     const updated = await api('edl/' + edl.id, { method: 'PUT', body: JSON.stringify(editEdlData) });
-                    setCurrentEdl(updated);
+                    if (onEdlUpdate) onEdlUpdate(updated);
                     setShowEditEdl(false);
                     showNotif('EDL mis à jour !');
                   } catch (e) { showNotif(e.message, 'error'); }

@@ -862,7 +862,8 @@ export async function GET(request) {
         const plafondStr = [d.nature_plafond, d.etat_plafond].filter(Boolean).join(' - ');
         const solStr = [d.nature_sol, d.etat_sol].filter(Boolean).join(' - ');
         let blockH = 55;
-        if (murStr || plafondStr) blockH += 14;
+        if (murStr) blockH += 14;
+        if (plafondStr) blockH += 14; // now on separate line
         if (d.obs_murs) blockH += 13;
         if (solStr) blockH += 14;
         if (d.obs_sol) blockH += 13;
