@@ -1241,9 +1241,11 @@ export async function POST(request) {
     if (segments[0] === 'edl' && !segments[1]) {
       const edl = {
         id: uuidv4(),
-        user_id: authUser.userId, // Link EDL to authenticated user
+        user_id: authUser.userId,
         created_at: new Date().toISOString(),
         adresse: body.adresse || '',
+        code_postal: body.code_postal || '',
+        ville: body.ville || '',
         type_logement: body.type_logement || 'T2',
         type_edl: body.type_edl || 'Entrée',
         nom_locataire: body.nom_locataire || '',
