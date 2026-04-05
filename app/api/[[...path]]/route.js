@@ -465,9 +465,13 @@ export async function GET(request) {
       
       // Colonne 2 : Adresse
       page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
-      page.drawText(edl.adresse.substring(0, 50), { x: 250, y: yPos - 35, size: 11, font });
-      if (edl.adresse.length > 50) {
-        page.drawText(edl.adresse.substring(50), { x: 250, y: yPos - 50, size: 11, font });
+      const adresseLigne1 = (edl.adresse || '').substring(0, 55);
+      page.drawText(adresseLigne1, { x: 250, y: yPos - 35, size: 11, font });
+      const cpVille = [edl.code_postal, edl.ville].filter(Boolean).join(' ');
+      if (cpVille) {
+        page.drawText(cpVille, { x: 250, y: yPos - 50, size: 11, font });
+      } else if (edl.adresse && edl.adresse.length > 55) {
+        page.drawText(edl.adresse.substring(55, 110), { x: 250, y: yPos - 50, size: 11, font });
       }
       
       yPos -= 100;
@@ -775,9 +779,13 @@ export async function GET(request) {
       
       // Colonne 2 : Adresse
       page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
-      page.drawText(edl.adresse.substring(0, 50), { x: 250, y: yPos - 35, size: 11, font });
-      if (edl.adresse.length > 50) {
-        page.drawText(edl.adresse.substring(50), { x: 250, y: yPos - 50, size: 11, font });
+      const adresseLigne1 = (edl.adresse || '').substring(0, 55);
+      page.drawText(adresseLigne1, { x: 250, y: yPos - 35, size: 11, font });
+      const cpVille = [edl.code_postal, edl.ville].filter(Boolean).join(' ');
+      if (cpVille) {
+        page.drawText(cpVille, { x: 250, y: yPos - 50, size: 11, font });
+      } else if (edl.adresse && edl.adresse.length > 55) {
+        page.drawText(edl.adresse.substring(55, 110), { x: 250, y: yPos - 50, size: 11, font });
       }
       
       yPos -= 100;

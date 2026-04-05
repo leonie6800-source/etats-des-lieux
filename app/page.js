@@ -115,7 +115,7 @@ export default function App() {
 
   // Form state for new EDL
   const [newEdl, setNewEdl] = useState({
-    adresse: '', type_logement: 'T2', type_edl: 'Entrée',
+    adresse: '', code_postal: '', ville: '', type_logement: 'T2', type_edl: 'Entrée',
     nom_locataire: '', nom_proprietaire: '', email_locataire: '',
   });
 
@@ -368,7 +368,7 @@ export default function App() {
     try {
       const edl = await api('edl', { method: 'POST', body: JSON.stringify(newEdl) });
       showNotif('État des lieux créé !');
-      setNewEdl({ adresse: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '' });
+      setNewEdl({ adresse: '', code_postal: '', ville: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '' });
       setShowCreateForm(false);
       // FORCE REFRESH - Refetch all EDLs
       const updatedEdls = await api('edl');
@@ -661,7 +661,22 @@ function DashboardView({ edls, showCreate, setShowCreate, newEdl, setNewEdl, cre
               <label className="text-sm font-medium text-gray-700 mb-1 block">Adresse du logement *</label>
               <input type="text" value={newEdl.adresse} onChange={e => setNewEdl({...newEdl, adresse: e.target.value})}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] focus:border-transparent outline-none"
-                placeholder="12 rue de la Paix, 75001 Paris" />
+                placeholder="12 rue de la Paix" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Code postal *</label>
+                <input type="text" value={newEdl.code_postal} onChange={e => setNewEdl({...newEdl, code_postal: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                  placeholder="75001" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Ville *</label>
+                <input type="text" value={newEdl.ville} onChange={e => setNewEdl({...newEdl, ville: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                  placeholder="Paris" />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
