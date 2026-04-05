@@ -83,7 +83,7 @@ async function sendEmail(toEmail, edl, downloadToken) {
     `;
 
     const result = await resend.emails.send({
-      from: 'État des Lieux Pro <noreply@rapport.etatdeslieuxpro.com>',
+      from: 'État des Lieux Pro <onboarding@resend.dev>',
       to: toEmail,
       subject: `Rapport d'état des lieux - ${edl?.adresse || 'Rapport'}`,
       html: emailHtml,
