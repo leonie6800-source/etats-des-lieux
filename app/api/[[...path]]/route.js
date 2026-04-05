@@ -1863,10 +1863,12 @@ export async function POST(request) {
     if (segments[0] === 'email' && segments[1] === 'send') {
       if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const { to, edl_id, download_token } = body;
+      console.log('📧 email/send called - to:', to, 'edl_id:', edl_id, 'RESEND_KEY set:', !!process.env.RESEND_API_KEY);
       if (!to || !to.includes('@')) {
         return NextResponse.json({ error: 'Email invalide' }, { status: 400, headers: corsHeaders() });
       }
       const edl = await db.collection('edl').findOne({ id: edl_id });
+      console.log('📧 EDL found:', !!edl, 'user match:', edl?.user_id === authUser.userId);
       if (!edl || edl.user_id !== authUser.userId) {
         return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       }
