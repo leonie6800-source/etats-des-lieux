@@ -490,91 +490,123 @@ export async function GET(request) {
       page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 16, font: fontBold, color: colorPrimary });
       yPos -= 50;
       
-      // PAGE 2+: ROOMS TABLE
+      // PAGE 2+: ROOMS DETAIL
       for (let i = 0; i < pieces.length; i++) {
         const piece = pieces[i];
         const d = piece.donnees_json || {};
         const photos = piece.photos || [];
-        
-        if (yPos < 150) {
+
+        // Pre-calculate equipment list
+        const equips = [];
+        if (d.etat_fenetres) equips.push(`Fenêtres: ${d.etat_fenetres}`);
+        if (d.etat_portes) equips.push(`Portes: ${d.etat_portes}`);
+        if (d.etat_volets) equips.push(`Volets: ${d.etat_volets}`);
+        if (d.etat_prises) equips.push(`Prises: ${d.etat_prises}`);
+        if (d.etat_interrupteurs) equips.push(`Interrupteurs: ${d.etat_interrupteurs}`);
+        if (d.etat_radiateurs) equips.push(`Radiateurs: ${d.etat_radiateurs}`);
+        // Kitchen specifics
+        ['plaques_de_cuisson','four','hotte','réfrigérateur','évier','robinetterie'].forEach(k => {
+          if (d[`etat_${k}`]) equips.push(`${k.replace(/_/g,' ')}: ${d[`etat_${k}`]}`);
+        });
+        // Bathroom specifics
+        ['baignoire/douche','lavabo','wc'].forEach(k => {
+          const key = `etat_sdb_${k.replace(/[\/ ]/g,'_')}`;
+          if (d[key]) equips.push(`${k}: ${d[key]}`);
+        });
+
+        // Dynamic block height
+        const murStr = [d.nature_murs, d.etat_murs].filter(Boolean).join(' - ');
+        const plafondStr = [d.nature_plafond, d.etat_plafond].filter(Boolean).join(' - ');
+        const solStr = [d.nature_sol, d.etat_sol].filter(Boolean).join(' - ');
+        let blockH = 55; // header: name + état général + separator
+        if (murStr || plafondStr) blockH += 14;
+        if (d.obs_murs) blockH += 13;
+        if (solStr) blockH += 14;
+        if (d.obs_sol) blockH += 13;
+        if (equips.length > 0) blockH += 14;
+        if (d.obs_equipements) blockH += 13;
+        if (d.observations_generales) blockH += 14;
+        blockH = Math.max(blockH, 90) + 20; // min 90px + bottom padding
+
+        if (yPos - blockH < 80) {
           page = pdfDoc.addPage([595, 842]);
-          
-          // Add HUGE watermark to new page
           if (logoImage) {
-            const watermarkSize = 700; // ÉNORME
-            const watermarkX = (595 - watermarkSize) / 2;
-            const watermarkY = (842 - watermarkSize) / 2;
-            page.drawImage(logoImage, {
-              x: watermarkX,
-              y: watermarkY,
-              width: watermarkSize,
-              height: watermarkSize,
-              opacity: 0.08
-            });
+            const wSize = 700;
+            page.drawImage(logoImage, { x: (595 - wSize) / 2, y: (842 - wSize) / 2, width: wSize, height: wSize, opacity: 0.08 });
           }
-          
           yPos = 800;
         }
-        
-        // Alternating row colors with border
+
+        // Background block
         const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : colorBg;
-        page.drawRectangle({ x: 40, y: yPos - 85, width: 515, height: 95, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
-        
-        // Piece name with underline
-        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 20, size: 11, font: fontBold, color: colorPrimary });
-        page.drawLine({ start: { x: 50, y: yPos - 25 }, end: { x: 200, y: yPos - 25 }, thickness: 1, color: colorBorder });
-        
-        // État
+        page.drawRectangle({ x: 40, y: yPos - blockH, width: 515, height: blockH, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
+
+        // Room name + état général header
+        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 16, size: 12, font: fontBold, color: colorPrimary });
         const etat = d.etat_general || 'Non renseigné';
-        page.drawText(`État: ${etat}`, { x: 50, y: yPos - 30, size: 9, font });
-        
-        // Observations (IA)
-        if (d.observations_generales) {
-          const obs = d.observations_generales.substring(0, 80) + (d.observations_generales.length > 80 ? '...' : '');
-          page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 45, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
+        page.drawText(`État général: ${etat}`, { x: 50, y: yPos - 32, size: 10, font });
+        page.drawLine({ start: { x: 50, y: yPos - 40 }, end: { x: 540, y: yPos - 40 }, thickness: 0.4, color: colorBorder });
+
+        let yLine = yPos - 54;
+
+        // Murs + Plafond
+        if (murStr) page.drawText(`Murs: ${murStr}`, { x: 50, y: yLine, size: 9, font });
+        if (plafondStr) page.drawText(`Plafond: ${plafondStr}`, { x: 280, y: yLine, size: 9, font });
+        if (murStr || plafondStr) yLine -= 13;
+        if (d.obs_murs) {
+          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '…' : d.obs_murs;
+          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          yLine -= 13;
         }
-        
-        // Photo thumbnails (improved positioning)
+
+        // Sol
+        if (solStr) {
+          page.drawText(`Sol: ${solStr}`, { x: 50, y: yLine, size: 9, font });
+          yLine -= 13;
+        }
+        if (d.obs_sol) {
+          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '…' : d.obs_sol;
+          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          yLine -= 13;
+        }
+
+        // Équipements
+        if (equips.length > 0) {
+          const equipStr = equips.join(' | ');
+          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '…' : equipStr;
+          page.drawText(`Équip.: ${equipTrunc}`, { x: 50, y: yLine, size: 9, font });
+          yLine -= 13;
+        }
+        if (d.obs_equipements) {
+          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '…' : d.obs_equipements;
+          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          yLine -= 13;
+        }
+
+        // Observations générales (IA)
+        if (d.observations_generales) {
+          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '…' : d.observations_generales;
+          page.drawText(`IA: ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
+        }
+
+        // Photo thumbnail (right side)
         if (photos.length > 0) {
-          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
-          
-          // Embed first photo as thumbnail (larger: 80x60)
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
           if (photos[0].url) {
             try {
               let imageUrl = photos[0].url;
-              // Apply Cloudinary transformations
               if (imageUrl.includes('cloudinary.com')) {
                 imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_300,c_limit/');
               }
-              
-              console.log('🖼️  Fetching image:', imageUrl);
               const imgResponse = await fetch(imageUrl);
-              console.log('📥 Image fetched, status:', imgResponse.status);
-              
-              if (!imgResponse.ok) {
-                throw new Error(`HTTP ${imgResponse.status}`);
-              }
-              
+              if (!imgResponse.ok) throw new Error(`HTTP ${imgResponse.status}`);
               const imgBytes = await imgResponse.arrayBuffer();
-              console.log('✅ Image bytes received:', imgBytes.byteLength, 'bytes');
-              
-              // Try to embed as JPG
               let image;
-              try {
-                image = await pdfDoc.embedJpg(imgBytes);
-                console.log('✅ Image embedded as JPG');
-              } catch (jpgErr) {
-                console.log('⚠️  JPG embed failed, trying PNG:', jpgErr.message);
-                image = await pdfDoc.embedPng(imgBytes);
-                console.log('✅ Image embedded as PNG');
-              }
-              
-              // Draw image with better positioning (right-aligned, larger)
+              try { image = await pdfDoc.embedJpg(imgBytes); } catch { image = await pdfDoc.embedPng(imgBytes); }
               const imgWidth = 80;
               const imgHeight = 60;
-              const imgX = 515 - imgWidth - 10; // Right-aligned with margin
-              const imgY = yPos - 70;
-              
+              const imgX = 515 - imgWidth - 10;
+              const imgY = yPos - blockH + 15;
               // Draw image first (behind border)
               page.drawImage(image, {
                 x: imgX,
@@ -593,36 +625,45 @@ export async function GET(request) {
                 borderWidth: 1
               });
               
-              console.log('✅ Image drawn on page at x:', imgX, 'y:', imgY);
             } catch (err) {
               console.error('❌ Error embedding image:', err);
-              // Draw red X to show error
               page.drawText('Photo indisponible', { x: 420, y: yPos - 50, size: 8, font: fontItalic, color: rgb(0.7, 0, 0) });
             }
           }
         }
-        
-        yPos -= 100;
+
+        yPos -= blockH + 5;
       }
-      
+
       // LAST PAGE: SIGNATURES
       page = pdfDoc.addPage([595, 842]);
+      if (logoImage) {
+        page.drawImage(logoImage, { x: (595 - 700) / 2, y: (842 - 700) / 2, width: 700, height: 700, opacity: 0.06 });
+      }
       yPos = 750;
-      
-      page.drawText('SIGNATURES', { x: 250, y: yPos, size: 16, font: fontBold, color: rgb(0.12, 0.23, 0.37) });
-      yPos -= 50;
-      
+
+      page.drawText('SIGNATURES', { x: 50, y: yPos, size: 18, font: fontBold, color: colorPrimary });
+      page.drawLine({ start: { x: 50, y: yPos - 8 }, end: { x: 540, y: yPos - 8 }, thickness: 1, color: colorBorder });
+      yPos -= 40;
+
       // Locataire signature box
-      page.drawRectangle({ x: 40, y: yPos - 100, width: 200, height: 120, color: rgb(0.95, 0.95, 0.95), borderColor: rgb(0.5, 0.5, 0.5), borderWidth: 1 });
-      page.drawText('Le Locataire', { x: 50, y: yPos, size: 11, font: fontBold });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 20, size: 10, font });
-      page.drawText('Signature:', { x: 50, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-      
+      page.drawRectangle({ x: 40, y: yPos - 130, width: 230, height: 140, color: colorBg, borderColor: colorPrimary, borderWidth: 1.5 });
+      page.drawText('LE LOCATAIRE', { x: 50, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 32, size: 12, font: fontBold });
+      page.drawText('Lu et approuvé', { x: 50, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('Signature :', { x: 50, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      // Signature line
+      page.drawLine({ start: { x: 50, y: yPos - 100 }, end: { x: 255, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+      page.drawText('Date : ____/____/________', { x: 50, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+
       // Propriétaire signature box
-      page.drawRectangle({ x: 355, y: yPos - 100, width: 200, height: 120, color: rgb(0.95, 0.95, 0.95), borderColor: rgb(0.5, 0.5, 0.5), borderWidth: 1 });
-      page.drawText('Le Propriétaire', { x: 365, y: yPos, size: 11, font: fontBold });
-      page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
-      page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawRectangle({ x: 320, y: yPos - 130, width: 230, height: 140, color: colorBg, borderColor: colorPrimary, borderWidth: 1.5 });
+      page.drawText('LE PROPRIÉTAIRE / AGENCE', { x: 330, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 330, y: yPos - 32, size: 12, font: fontBold });
+      page.drawText('Lu et approuvé', { x: 330, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+      page.drawText('Date : ____/____/________', { x: 330, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
       
       // Footer
       page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
@@ -757,162 +798,164 @@ export async function GET(request) {
       page.drawText('DÉTAIL DES PIÈCES', { x: 50, y: yPos - 18, size: 16, font: fontBold, color: colorPrimary });
       yPos -= 50;
       
-      // PAGE 2+: ROOMS TABLE
+      // PAGE 2+: ROOMS DETAIL
       for (let i = 0; i < pieces.length; i++) {
         const piece = pieces[i];
         const d = piece.donnees_json || {};
         const photos = piece.photos || [];
-        
-        if (yPos < 150) {
+
+        // Pre-calculate equipment list
+        const equips = [];
+        if (d.etat_fenetres) equips.push(`Fenêtres: ${d.etat_fenetres}`);
+        if (d.etat_portes) equips.push(`Portes: ${d.etat_portes}`);
+        if (d.etat_volets) equips.push(`Volets: ${d.etat_volets}`);
+        if (d.etat_prises) equips.push(`Prises: ${d.etat_prises}`);
+        if (d.etat_interrupteurs) equips.push(`Interrupteurs: ${d.etat_interrupteurs}`);
+        if (d.etat_radiateurs) equips.push(`Radiateurs: ${d.etat_radiateurs}`);
+        ['plaques_de_cuisson','four','hotte','réfrigérateur','évier','robinetterie'].forEach(k => {
+          if (d[`etat_${k}`]) equips.push(`${k.replace(/_/g,' ')}: ${d[`etat_${k}`]}`);
+        });
+        ['baignoire/douche','lavabo','wc'].forEach(k => {
+          const key = `etat_sdb_${k.replace(/[\/ ]/g,'_')}`;
+          if (d[key]) equips.push(`${k}: ${d[key]}`);
+        });
+
+        // Dynamic block height
+        const murStr = [d.nature_murs, d.etat_murs].filter(Boolean).join(' - ');
+        const plafondStr = [d.nature_plafond, d.etat_plafond].filter(Boolean).join(' - ');
+        const solStr = [d.nature_sol, d.etat_sol].filter(Boolean).join(' - ');
+        let blockH = 55;
+        if (murStr || plafondStr) blockH += 14;
+        if (d.obs_murs) blockH += 13;
+        if (solStr) blockH += 14;
+        if (d.obs_sol) blockH += 13;
+        if (equips.length > 0) blockH += 14;
+        if (d.obs_equipements) blockH += 13;
+        if (d.observations_generales) blockH += 14;
+        blockH = Math.max(blockH, 90) + 20;
+
+        if (yPos - blockH < 80) {
           page = pdfDoc.addPage([595, 842]);
-          
-          // Add HUGE watermark to new page
           if (logoImage) {
-            const watermarkSize = 700; // ÉNORME
-            const watermarkX = (595 - watermarkSize) / 2;
-            const watermarkY = (842 - watermarkSize) / 2;
-            page.drawImage(logoImage, {
-              x: watermarkX,
-              y: watermarkY,
-              width: watermarkSize,
-              height: watermarkSize,
-              opacity: 0.08
-            });
+            const wSize = 700;
+            page.drawImage(logoImage, { x: (595 - wSize) / 2, y: (842 - wSize) / 2, width: wSize, height: wSize, opacity: 0.08 });
           }
-          
           yPos = 800;
         }
-        
-        // Alternating row colors with border
+
         const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : colorBg;
-        page.drawRectangle({ x: 40, y: yPos - 85, width: 515, height: 95, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
-        
-        // Piece name with underline - POLICE PLUS GROSSE
-        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 20, size: 13, font: fontBold, color: colorPrimary });
-        page.drawLine({ start: { x: 50, y: yPos - 25 }, end: { x: 200, y: yPos - 25 }, thickness: 1, color: colorBorder });
-        
-        // État - POLICE PLUS GROSSE
+        page.drawRectangle({ x: 40, y: yPos - blockH, width: 515, height: blockH, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
+
+        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 16, size: 12, font: fontBold, color: colorPrimary });
         const etat = d.etat_general || 'Non renseigné';
-        page.drawText(`État: ${etat}`, { x: 50, y: yPos - 40, size: 11, font });
-        
-        // Observations (IA) - POLICE PLUS GROSSE
-        if (d.observations_generales) {
-          const obs = d.observations_generales.substring(0, 80) + (d.observations_generales.length > 80 ? '...' : '');
-          page.drawText(`Obs: ${obs}`, { x: 50, y: yPos - 55, size: 10, font, color: rgb(0.3, 0.3, 0.3) });
+        page.drawText(`État général: ${etat}`, { x: 50, y: yPos - 32, size: 10, font });
+        page.drawLine({ start: { x: 50, y: yPos - 40 }, end: { x: 540, y: yPos - 40 }, thickness: 0.4, color: colorBorder });
+
+        let yLine = yPos - 54;
+
+        if (murStr) page.drawText(`Murs: ${murStr}`, { x: 50, y: yLine, size: 9, font });
+        if (plafondStr) page.drawText(`Plafond: ${plafondStr}`, { x: 280, y: yLine, size: 9, font });
+        if (murStr || plafondStr) yLine -= 13;
+        if (d.obs_murs) {
+          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '…' : d.obs_murs;
+          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          yLine -= 13;
         }
-        
-        // Photo thumbnails (improved positioning) - POLICE PLUS GROSSE
+
+        if (solStr) {
+          page.drawText(`Sol: ${solStr}`, { x: 50, y: yLine, size: 9, font });
+          yLine -= 13;
+        }
+        if (d.obs_sol) {
+          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '…' : d.obs_sol;
+          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          yLine -= 13;
+        }
+
+        if (equips.length > 0) {
+          const equipStr = equips.join(' | ');
+          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '…' : equipStr;
+          page.drawText(`Équip.: ${equipTrunc}`, { x: 50, y: yLine, size: 9, font });
+          yLine -= 13;
+        }
+        if (d.obs_equipements) {
+          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '…' : d.obs_equipements;
+          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          yLine -= 13;
+        }
+
+        if (d.observations_generales) {
+          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '…' : d.observations_generales;
+          page.drawText(`IA: ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
+        }
+
+        // Photo thumbnail
         if (photos.length > 0) {
-          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 25, size: 11, font, color: rgb(0.3, 0.3, 0.3) });
-          
-          // Embed first photo as thumbnail (larger: 80x60)
+          page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 430, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
           const firstPhoto = photos[0];
           if (firstPhoto.url || firstPhoto.data) {
             try {
               let imageBytes;
-              
-              // Check if we have URL or base64 data
               if (firstPhoto.url) {
-                // Image is stored in Cloudinary
                 let imageUrl = firstPhoto.url;
-                // Apply Cloudinary transformations
                 if (imageUrl.includes('cloudinary.com')) {
                   imageUrl = imageUrl.replace('/upload/', '/upload/q_auto,f_jpg,w_300,c_limit/');
                 }
-                
                 const imgResponse = await fetch(imageUrl);
-                
-                if (!imgResponse.ok) {
-                  throw new Error(`HTTP ${imgResponse.status}`);
-                }
-                
+                if (!imgResponse.ok) throw new Error(`HTTP ${imgResponse.status}`);
                 imageBytes = await imgResponse.arrayBuffer();
               } else if (firstPhoto.data) {
-                // Image is base64 data in DB
-                const base64Data = firstPhoto.data.split(',')[1]; // Remove data:image/jpeg;base64,
+                const base64Data = firstPhoto.data.split(',')[1];
                 const binaryString = Buffer.from(base64Data, 'base64');
                 imageBytes = binaryString.buffer.slice(binaryString.byteOffset, binaryString.byteOffset + binaryString.byteLength);
               }
-              
-              if (!imageBytes) {
-                throw new Error('No image data');
-              }
-              
-              // Try to embed as JPG
+              if (!imageBytes) throw new Error('No image data');
               let image;
-              try {
-                image = await pdfDoc.embedJpg(imageBytes);
-              } catch (jpgErr) {
-                image = await pdfDoc.embedPng(imageBytes);
-              }
-              
-              // Draw image with better positioning (right-aligned, larger)
+              try { image = await pdfDoc.embedJpg(imageBytes); } catch { image = await pdfDoc.embedPng(imageBytes); }
               const imgWidth = 80;
               const imgHeight = 60;
-              const imgX = 515 - imgWidth - 10; // Right-aligned with margin
-              const imgY = yPos - 70;
-              
-              // Draw image first (behind border)
-              page.drawImage(image, {
-                x: imgX,
-                y: imgY,
-                width: imgWidth,
-                height: imgHeight
-              });
-              
-              // Draw border over image
-              page.drawRectangle({
-                x: imgX,
-                y: imgY,
-                width: imgWidth,
-                height: imgHeight,
-                borderColor: rgb(0.7, 0.7, 0.7),
-                borderWidth: 1
-              });
+              const imgX = 515 - imgWidth - 10;
+              const imgY = yPos - blockH + 15;
+              page.drawImage(image, { x: imgX, y: imgY, width: imgWidth, height: imgHeight });
+              page.drawRectangle({ x: imgX, y: imgY, width: imgWidth, height: imgHeight, borderColor: rgb(0.7, 0.7, 0.7), borderWidth: 1 });
             } catch (err) {
               console.error('❌ Error embedding image:', err);
-              // Draw error text
               page.drawText('Photo indisponible', { x: 420, y: yPos - 50, size: 8, font: fontItalic, color: rgb(0.7, 0, 0) });
             }
           }
         }
-        
-        yPos -= 100;
+
+        yPos -= blockH + 5;
       }
-      
+
       // LAST PAGE: SIGNATURES
       page = pdfDoc.addPage([595, 842]);
-      
-      // Add HUGE watermark to signature page
       if (logoImage) {
-        const watermarkSize = 700; // ÉNORME
-        const watermarkX = (595 - watermarkSize) / 2;
-        const watermarkY = (842 - watermarkSize) / 2;
-        page.drawImage(logoImage, {
-          x: watermarkX,
-          y: watermarkY,
-          width: watermarkSize,
-          height: watermarkSize,
-          opacity: 0.08
-        });
+        page.drawImage(logoImage, { x: (595 - 700) / 2, y: (842 - 700) / 2, width: 700, height: 700, opacity: 0.06 });
       }
-      
       yPos = 750;
-      
-      page.drawText('SIGNATURES', { x: 250, y: yPos, size: 18, font: fontBold, color: colorPrimary });
-      yPos -= 50;
-      
+
+      page.drawText('SIGNATURES', { x: 50, y: yPos, size: 18, font: fontBold, color: colorPrimary });
+      page.drawLine({ start: { x: 50, y: yPos - 8 }, end: { x: 540, y: yPos - 8 }, thickness: 1, color: colorBorder });
+      yPos -= 40;
+
       // Locataire signature box
-      page.drawRectangle({ x: 40, y: yPos - 100, width: 200, height: 120, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('Le Locataire', { x: 50, y: yPos, size: 11, font: fontBold });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 20, size: 10, font });
-      page.drawText('Signature:', { x: 50, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-      
+      page.drawRectangle({ x: 40, y: yPos - 130, width: 230, height: 140, color: colorBg, borderColor: colorPrimary, borderWidth: 1.5 });
+      page.drawText('LE LOCATAIRE', { x: 50, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 32, size: 12, font: fontBold });
+      page.drawText('Lu et approuvé', { x: 50, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('Signature :', { x: 50, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawLine({ start: { x: 50, y: yPos - 100 }, end: { x: 255, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+      page.drawText('Date : ____/____/________', { x: 50, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+
       // Propriétaire signature box
-      page.drawRectangle({ x: 355, y: yPos - 100, width: 200, height: 120, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
-      page.drawText('Le Propriétaire', { x: 365, y: yPos, size: 11, font: fontBold });
-      page.drawText(edl.nom_proprietaire || 'N/A', { x: 365, y: yPos - 20, size: 10, font });
-      page.drawText('Signature:', { x: 365, y: yPos - 40, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawRectangle({ x: 320, y: yPos - 130, width: 230, height: 140, color: colorBg, borderColor: colorPrimary, borderWidth: 1.5 });
+      page.drawText('LE PROPRIÉTAIRE / AGENCE', { x: 330, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
+      page.drawText(edl.nom_proprietaire || 'N/A', { x: 330, y: yPos - 32, size: 12, font: fontBold });
+      page.drawText('Lu et approuvé', { x: 330, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+      page.drawText('Date : ____/____/________', { x: 330, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
       
       // BLOC DESIGN RÉDUIT EN BAS À DROITE : Logo + Nom
       const blockWidth = 180;
