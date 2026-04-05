@@ -652,7 +652,9 @@ export async function GET(request) {
       page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 32, size: 12, font: fontBold });
       page.drawText('Lu et approuvé', { x: 50, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
       page.drawText('Signature :', { x: 50, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
-      // Signature line
+      if (edl.signature_locataire) {
+        page.drawText(edl.signature_locataire, { x: 55, y: yPos - 87, size: 14, font: fontItalic, color: rgb(0.1, 0.1, 0.5) });
+      }
       page.drawLine({ start: { x: 50, y: yPos - 100 }, end: { x: 255, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
       page.drawText('Date : ____/____/________', { x: 50, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
 
@@ -664,7 +666,7 @@ export async function GET(request) {
       page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
       page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
       page.drawText('Date : ____/____/________', { x: 330, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
-      
+
       // Footer
       page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
         x: 50,
@@ -945,6 +947,9 @@ export async function GET(request) {
       page.drawText(edl.nom_locataire || 'N/A', { x: 50, y: yPos - 32, size: 12, font: fontBold });
       page.drawText('Lu et approuvé', { x: 50, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
       page.drawText('Signature :', { x: 50, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      if (edl.signature_locataire) {
+        page.drawText(edl.signature_locataire, { x: 55, y: yPos - 87, size: 14, font: fontItalic, color: rgb(0.1, 0.1, 0.5) });
+      }
       page.drawLine({ start: { x: 50, y: yPos - 100 }, end: { x: 255, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
       page.drawText('Date : ____/____/________', { x: 50, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
 
@@ -956,7 +961,7 @@ export async function GET(request) {
       page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
       page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
       page.drawText('Date : ____/____/________', { x: 330, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
-      
+
       // BLOC DESIGN RÉDUIT EN BAS À DROITE : Logo + Nom
       const blockWidth = 180;
       const blockHeight = 110;

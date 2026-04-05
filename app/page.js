@@ -1404,19 +1404,27 @@ function ReportView({ edl, pieces, showNotif }) {
         return;
       }
 
+      // Save signature to edl before generating PDF
+      if (signed && signName.trim()) {
+        await api('edl/' + edl.id, {
+          method: 'PUT',
+          body: JSON.stringify({ signature_locataire: signName.trim() }),
+        });
+      }
+
       // Use the NEW server-side PDF generation endpoint
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       const pdfUrl = `${baseUrl}/api/pdf-fresh/${downloadToken}`;
-      
+
       // On mobile, use location.href instead of window.open for better compatibility
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
         window.location.href = pdfUrl;
       } else {
         window.open(pdfUrl, '_blank');
       }
-      
+
       showNotif('📥 Téléchargement du PDF en cours...');
-      
+
       setGenerating(false);
     } catch (e) {
       showNotif('Erreur génération PDF: ' + e.message, 'error');
