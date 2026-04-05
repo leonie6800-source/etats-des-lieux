@@ -119,6 +119,11 @@ export default function App() {
     nom_locataire: '', nom_proprietaire: '', email_locataire: '',
   });
 
+  const showNotif = useCallback((msg, type = 'success') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
   // Register service worker
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -204,11 +209,6 @@ export default function App() {
       };
       pollPayment();
     }
-  }, []);
-
-  const showNotif = useCallback((msg, type = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
   }, []);
 
   // ---- Init: Load user session on mount ----
