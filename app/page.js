@@ -972,6 +972,7 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
             <VoiceInput
               value={localData.observations_generales || ''}
               onChange={v => update('observations_generales', v)}
+              showNotif={showNotif}
               placeholder="Décrivez l'état général de la pièce... ou utilisez le micro 🎙️"
               rows={4}
             />
@@ -1013,6 +1014,7 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
             <VoiceInput
               value={localData.obs_murs || ''}
               onChange={v => update('obs_murs', v)}
+              showNotif={showNotif}
               placeholder="Observations sur les murs et plafond... ou utilisez le micro 🎙️"
               rows={3}
             />
@@ -1042,6 +1044,7 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
             <VoiceInput
               value={localData.obs_sol || ''}
               onChange={v => update('obs_sol', v)}
+              showNotif={showNotif}
               placeholder="Observations sur le sol... ou utilisez le micro 🎙️"
               rows={3}
             />
@@ -1151,6 +1154,7 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
             <VoiceInput
               value={localData.obs_equipements || ''}
               onChange={v => update('obs_equipements', v)}
+              showNotif={showNotif}
               placeholder="Observations sur les équipements... ou utilisez le micro 🎙️"
               rows={3}
             />
@@ -1816,9 +1820,14 @@ function ReportView({ edl, pieces, showNotif }) {
 
 
 // ==================== VOICE INPUT COMPONENT ====================
-function VoiceInput({ value, onChange, placeholder, rows }) {
+function VoiceInput({ value, onChange, placeholder, rows, showNotif: showNotifProp }) {
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [localNotif, setLocalNotif] = useState(null);
+  const showNotif = showNotifProp || ((msg, type) => {
+    setLocalNotif({ msg, type });
+    setTimeout(() => setLocalNotif(null), 3000);
+  });
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
