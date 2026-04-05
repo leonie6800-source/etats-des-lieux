@@ -546,7 +546,7 @@ export async function GET(request) {
         if (d.obs_murs) blockH += 13;
         if (solStr) blockH += 14;
         if (d.obs_sol) blockH += 13;
-        if (equips.length > 0) blockH += 14;
+        if (equips.length > 0) { blockH += 14; if (equips.join(' | ').length > 68) blockH += 13; }
         if (d.obs_equipements) blockH += 13;
         if (d.observations_generales) blockH += 14;
         blockH = Math.max(blockH, 90) + 20; // min 90px + bottom padding
@@ -572,7 +572,7 @@ export async function GET(request) {
 
         let yLine = yPos - 54;
 
-        const T = 60; // max chars to avoid photo overlap (photo starts at x=415)
+        const T = 68; // max chars per line (photo at x=415, text area ~370px at size 9)
         // Murs then Plafond on separate lines
         if (murStr) { page.drawText(pdfText(`Murs: ${murStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
@@ -593,12 +593,17 @@ export async function GET(request) {
           yLine -= 13;
         }
 
-        // Equipements
+        // Equipements - split into lines of T chars
         if (equips.length > 0) {
           const equipStr = equips.join(' | ');
-          const equipTrunc = equipStr.length > T ? equipStr.substring(0, T) + '...' : equipStr;
-          page.drawText(pdfText(`Equip.: ${equipTrunc}`), { x: 50, y: yLine, size: 9, font });
+          const line1 = equipStr.substring(0, T);
+          const line2 = equipStr.length > T ? equipStr.substring(T, T * 2) : '';
+          page.drawText(pdfText(`Equip.: ${line1}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
+          if (line2) {
+            page.drawText(pdfText(`  ${line2}${equipStr.length > T * 2 ? '...' : ''}`), { x: 50, y: yLine, size: 9, font });
+            yLine -= 13;
+          }
         }
         if (d.obs_equipements) {
           const obs = d.obs_equipements.length > T ? d.obs_equipements.substring(0, T) + '...' : d.obs_equipements;
@@ -612,7 +617,7 @@ export async function GET(request) {
           page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
         }
 
-        // Photo thumbnail (right side, x=415 so no overlap)
+        // Photo thumbnail (right side, x=415)
         if (photos.length > 0) {
           page.drawText(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, { x: 415, y: yPos - 16, size: 9, font, color: rgb(0.3, 0.3, 0.3) });
           if (photos[0].url) {
@@ -867,7 +872,7 @@ export async function GET(request) {
         if (d.obs_murs) blockH += 13;
         if (solStr) blockH += 14;
         if (d.obs_sol) blockH += 13;
-        if (equips.length > 0) blockH += 14;
+        if (equips.length > 0) { blockH += 14; if (equips.join(' | ').length > 68) blockH += 13; }
         if (d.obs_equipements) blockH += 13;
         if (d.observations_generales) blockH += 14;
         blockH = Math.max(blockH, 90) + 20;
