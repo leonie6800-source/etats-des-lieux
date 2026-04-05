@@ -465,13 +465,18 @@ export async function GET(request) {
       
       // Colonne 2 : Adresse
       page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
-      const adresseLigne1 = (edl.adresse || '').substring(0, 55);
-      page.drawText(adresseLigne1, { x: 250, y: yPos - 35, size: 11, font });
-      const cpVille = [edl.code_postal, edl.ville].filter(Boolean).join(' ');
+      // Build CP+ville: from separate fields, or extract from adresse string
+      let cpVille = [edl.code_postal, edl.ville].filter(Boolean).join(' ');
+      if (!cpVille && edl.adresse) {
+        const cpMatch = edl.adresse.match(/(\d{5})\s+(\S.*)$/);
+        if (cpMatch) cpVille = cpMatch[1] + ' ' + cpMatch[2];
+      }
+      // Show street on line 1 (strip CP/ville if already in adresse)
+      let rue = (edl.adresse || '');
+      if (cpVille && rue.includes(cpVille)) rue = rue.replace(cpVille, '').replace(/,\s*$/, '').trim();
+      page.drawText(rue.substring(0, 55), { x: 250, y: yPos - 35, size: 11, font });
       if (cpVille) {
-        page.drawText(cpVille, { x: 250, y: yPos - 50, size: 11, font });
-      } else if (edl.adresse && edl.adresse.length > 55) {
-        page.drawText(edl.adresse.substring(55, 110), { x: 250, y: yPos - 50, size: 11, font });
+        page.drawText(cpVille.substring(0, 40), { x: 250, y: yPos - 50, size: 11, font });
       }
       
       yPos -= 100;
@@ -660,7 +665,7 @@ export async function GET(request) {
         page.drawText(edl.signature_locataire, { x: 55, y: yPos - 87, size: 14, font: fontItalic, color: rgb(0.1, 0.1, 0.5) });
       }
       page.drawLine({ start: { x: 50, y: yPos - 100 }, end: { x: 255, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
-      page.drawText('Date : ____/____/________', { x: 50, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 50, y: yPos - 120, size: 9, font: fontBold });
 
       // Propriétaire signature box
       page.drawRectangle({ x: 320, y: yPos - 130, width: 230, height: 140, color: colorBg, borderColor: colorPrimary, borderWidth: 1.5 });
@@ -669,7 +674,7 @@ export async function GET(request) {
       page.drawText('Lu et approuvé', { x: 330, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
       page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
       page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
-      page.drawText('Date : ____/____/________', { x: 330, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 330, y: yPos - 120, size: 9, font: fontBold });
 
       // Footer
       page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
@@ -779,13 +784,18 @@ export async function GET(request) {
       
       // Colonne 2 : Adresse
       page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
-      const adresseLigne1 = (edl.adresse || '').substring(0, 55);
-      page.drawText(adresseLigne1, { x: 250, y: yPos - 35, size: 11, font });
-      const cpVille = [edl.code_postal, edl.ville].filter(Boolean).join(' ');
+      // Build CP+ville: from separate fields, or extract from adresse string
+      let cpVille = [edl.code_postal, edl.ville].filter(Boolean).join(' ');
+      if (!cpVille && edl.adresse) {
+        const cpMatch = edl.adresse.match(/(\d{5})\s+(\S.*)$/);
+        if (cpMatch) cpVille = cpMatch[1] + ' ' + cpMatch[2];
+      }
+      // Show street on line 1 (strip CP/ville if already in adresse)
+      let rue = (edl.adresse || '');
+      if (cpVille && rue.includes(cpVille)) rue = rue.replace(cpVille, '').replace(/,\s*$/, '').trim();
+      page.drawText(rue.substring(0, 55), { x: 250, y: yPos - 35, size: 11, font });
       if (cpVille) {
-        page.drawText(cpVille, { x: 250, y: yPos - 50, size: 11, font });
-      } else if (edl.adresse && edl.adresse.length > 55) {
-        page.drawText(edl.adresse.substring(55, 110), { x: 250, y: yPos - 50, size: 11, font });
+        page.drawText(cpVille.substring(0, 40), { x: 250, y: yPos - 50, size: 11, font });
       }
       
       yPos -= 100;
@@ -959,7 +969,7 @@ export async function GET(request) {
         page.drawText(edl.signature_locataire, { x: 55, y: yPos - 87, size: 14, font: fontItalic, color: rgb(0.1, 0.1, 0.5) });
       }
       page.drawLine({ start: { x: 50, y: yPos - 100 }, end: { x: 255, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
-      page.drawText('Date : ____/____/________', { x: 50, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 50, y: yPos - 120, size: 9, font: fontBold });
 
       // Propriétaire signature box
       page.drawRectangle({ x: 320, y: yPos - 130, width: 230, height: 140, color: colorBg, borderColor: colorPrimary, borderWidth: 1.5 });
@@ -968,7 +978,7 @@ export async function GET(request) {
       page.drawText('Lu et approuvé', { x: 330, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
       page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
       page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
-      page.drawText('Date : ____/____/________', { x: 330, y: yPos - 120, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 330, y: yPos - 120, size: 9, font: fontBold });
 
       // BLOC DESIGN RÉDUIT EN BAS À DROITE : Logo + Nom
       const blockWidth = 180;
