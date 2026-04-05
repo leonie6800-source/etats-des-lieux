@@ -1868,8 +1868,8 @@ function VoiceInput({ value, onChange, placeholder, rows }) {
             onChange(newText);
             showNotif('✅ Transcription réussie !');
           } catch (e) {
-            // Silent fail - transcription error but don't show notification if recording worked
-            console.log('Transcription error (ignored):', e);
+            console.error('Transcription error:', e);
+            showNotif('❌ Erreur transcription : ' + (e.message || 'Réessayez'), 'error');
           }
           setProcessing(false);
         };
