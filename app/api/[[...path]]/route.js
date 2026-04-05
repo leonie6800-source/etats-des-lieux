@@ -8,6 +8,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
+import { LOGO_BASE64 } from '../../../lib/logo-base64.js';
 
 let _openai = null;
 let _stripe = null;
@@ -401,16 +402,13 @@ export async function GET(request) {
       // Create PDF with pdf-lib
       const pdfDoc = await PDFDocument.create();
 
-      // Load logo
+      // Load logo from embedded base64
       let logoImage = null;
       try {
-        const fs = (await import('fs')).default;
-        const path = (await import('path')).default;
-        const logoPath = path.join(process.cwd(), 'public', 'logo-edl-pro.png');
-        const logoBytes = fs.readFileSync(logoPath);
+        const logoBytes = Buffer.from(LOGO_BASE64, 'base64');
         logoImage = await pdfDoc.embedPng(logoBytes);
       } catch (err) {
-        console.error('Logo not found, continuing without it');
+        console.error('Logo embed error:', err.message);
       }
       const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
       const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
@@ -676,10 +674,7 @@ export async function GET(request) {
       // Load logo AFTER creating pdfDoc
       let logoImage = null;
       try {
-        const fs = (await import('fs')).default;
-        const path = (await import('path')).default;
-        const logoPath = path.join(process.cwd(), 'public', 'logo-edl-pro.png');
-        const logoBytes = fs.readFileSync(logoPath);
+        const logoBytes = Buffer.from(LOGO_BASE64, 'base64');
         logoImage = await pdfDoc.embedPng(logoBytes);
         console.log('✅ Logo loaded successfully');
       } catch (err) {
