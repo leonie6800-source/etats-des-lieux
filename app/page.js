@@ -1440,46 +1440,20 @@ function ReportView({ edl, pieces, showNotif }) {
     }
     setSendingEmail(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
-      const downloadLink = `${baseUrl}/api/pdf-fresh/${downloadToken}`;
-
-      emailjs.init(process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || '');
-      const templateParams = {
-        email: emailTo,
-        nom: edl?.nom_locataire || 'Destinataire',
-        adresse_du_bien: edl?.adresse || '',
-        message: [
-          `Bonjour ${edl?.nom_locataire || ''},`,
-          ``,
-          `Votre rapport d'état des lieux est prêt.`,
-          ``,
-          `Adresse : ${edl?.adresse || ''}`,
-          `Type : ${edl?.type_logement || ''} — ${edl?.type_edl || ''}`,
-          `Locataire : ${edl?.nom_locataire || ''}`,
-          `Propriétaire : ${edl?.nom_proprietaire || ''}`,
-          `Date : ${new Date().toLocaleDateString('fr-FR')}`,
-          ``,
-          `Téléchargez votre rapport PDF ici :`,
-          downloadLink,
-          ``,
-          `Cordialement,`,
-          `État des Lieux Pro`,
-        ].join('\n'),
-      };
-      
-      console.log('📧 Sending email to:', emailTo);
-      
-      await emailjs.send(
-        process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || '',
-        process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || '',
-        templateParams
-      );
+      await api('email/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          to: emailTo,
+          edl_id: edl.id,
+          download_token: downloadToken,
+        }),
+      });
       showNotif('✅ Email envoyé avec succès !');
       setShowEmailModal(false);
       setEmailTo('');
     } catch (e) {
-      console.error('❌ EmailJS error:', e);
-      showNotif('Erreur envoi email: ' + (e?.text || e?.message || 'Vérifiez votre connexion'), 'error');
+      console.error('❌ Email error:', e);
+      showNotif('Erreur envoi email: ' + (e?.message || 'Réessayez'), 'error');
     }
     setSendingEmail(false);
   };

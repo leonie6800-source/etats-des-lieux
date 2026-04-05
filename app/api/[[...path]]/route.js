@@ -1762,6 +1762,25 @@ export async function POST(request) {
       }
     }
 
+    // POST /api/email/send - Send report email via Resend
+    if (segments[0] === 'email' && segments[1] === 'send') {
+      if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
+      const { to, edl_id, download_token } = body;
+      if (!to || !to.includes('@')) {
+        return NextResponse.json({ error: 'Email invalide' }, { status: 400, headers: corsHeaders() });
+      }
+      const edl = await db.collection('edl').findOne({ id: edl_id });
+      if (!edl || edl.user_id !== authUser.userId) {
+        return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
+      }
+      const sent = await sendEmail(to, edl, download_token);
+      if (sent) {
+        return NextResponse.json({ success: true }, { headers: corsHeaders() });
+      } else {
+        return NextResponse.json({ error: 'Erreur envoi email' }, { status: 500, headers: corsHeaders() });
+      }
+    }
+
     // POST /api/admin/unlock - Unlock EDL via promo code or admin key
     if (segments[0] === 'admin' && segments[1] === 'unlock') {
       const { edl_id, promo_code, admin_key } = body;
