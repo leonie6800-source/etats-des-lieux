@@ -1857,11 +1857,12 @@ export async function POST(request) {
       const validPromoCodes = (process.env.PROMO_CODES || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
 
       const submittedCode = (promo_code || admin_key || '').toUpperCase();
+      console.log('🔑 promo debug - submitted:', JSON.stringify(submittedCode), 'valid codes:', JSON.stringify(validPromoCodes), 'admin key match:', submittedCode === (validAdminKey || '').toUpperCase());
       const isValid = (validAdminKey && submittedCode === validAdminKey.toUpperCase()) ||
                       (validPromoCodes.length > 0 && validPromoCodes.includes(submittedCode));
 
       if (!isValid) {
-        return NextResponse.json({ error: 'Code invalide' }, { status: 403, headers: corsHeaders() });
+        return NextResponse.json({ error: 'Code invalide', debug: { submitted: submittedCode, validCodes: validPromoCodes } }, { status: 403, headers: corsHeaders() });
       }
       
       if (!edl_id) {
