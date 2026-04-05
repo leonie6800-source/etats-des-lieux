@@ -146,6 +146,20 @@ function generateToken(userId, email) {
   );
 }
 
+// Sanitize text for pdf-lib WinAnsi encoding (replaces unsupported Unicode chars)
+function pdfText(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // curly single quotes
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')  // curly double quotes
+    .replace(/\u2026/g, '...')                     // ellipsis
+    .replace(/\u2013/g, '-')                       // en dash
+    .replace(/\u2014/g, '--')                      // em dash
+    .replace(/\u2192/g, '>')                       // right arrow
+    .replace(/\u2190/g, '<')                       // left arrow
+    .replace(/[^\x00-\xFF]/g, '?');               // any other non-Latin1 char
+}
+
 function verifyToken(token) {
   try {
     return jwt.verify(token, process.env.JWT_SECRET);
@@ -490,7 +504,7 @@ export async function GET(request) {
       // SECTION: Locataire (styled box) - POLICE PLUS GROSSE
       page.drawRectangle({ x: 310, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
       page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 12, font: fontBold, color: colorPrimary });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 11, font });
+      page.drawText(pdfText(edl.nom_locataire || 'N/A'), { x: 320, y: yPos - 35, size: 11, font });
       
       yPos -= 110;
       
@@ -551,51 +565,51 @@ export async function GET(request) {
         page.drawRectangle({ x: 40, y: yPos - blockH, width: 515, height: blockH, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
 
         // Room name + état général header
-        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 16, size: 12, font: fontBold, color: colorPrimary });
+        page.drawText(pdfText(piece.nom || 'N/A'), { x: 50, y: yPos - 16, size: 12, font: fontBold, color: colorPrimary });
         const etat = d.etat_general || 'Non renseigné';
-        page.drawText(`État général: ${etat}`, { x: 50, y: yPos - 32, size: 10, font });
+        page.drawText(pdfText(`Etat general: ${etat}`), { x: 50, y: yPos - 32, size: 10, font });
         page.drawLine({ start: { x: 50, y: yPos - 40 }, end: { x: 540, y: yPos - 40 }, thickness: 0.4, color: colorBorder });
 
         let yLine = yPos - 54;
 
         // Murs + Plafond
-        if (murStr) page.drawText(`Murs: ${murStr}`, { x: 50, y: yLine, size: 9, font });
-        if (plafondStr) page.drawText(`Plafond: ${plafondStr}`, { x: 280, y: yLine, size: 9, font });
+        if (murStr) page.drawText(pdfText(`Murs: ${murStr}`), { x: 50, y: yLine, size: 9, font });
+        if (plafondStr) page.drawText(pdfText(`Plafond: ${plafondStr}`), { x: 280, y: yLine, size: 9, font });
         if (murStr || plafondStr) yLine -= 13;
         if (d.obs_murs) {
-          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '…' : d.obs_murs;
-          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '...' : d.obs_murs;
+          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         // Sol
         if (solStr) {
-          page.drawText(`Sol: ${solStr}`, { x: 50, y: yLine, size: 9, font });
+          page.drawText(pdfText(`Sol: ${solStr}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_sol) {
-          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '…' : d.obs_sol;
-          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '...' : d.obs_sol;
+          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         // Équipements
         if (equips.length > 0) {
           const equipStr = equips.join(' | ');
-          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '…' : equipStr;
-          page.drawText(`Équip.: ${equipTrunc}`, { x: 50, y: yLine, size: 9, font });
+          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '...' : equipStr;
+          page.drawText(pdfText(`Equip.: ${equipTrunc}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_equipements) {
-          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '…' : d.obs_equipements;
-          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '...' : d.obs_equipements;
+          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         // Observations générales (IA)
         if (d.observations_generales) {
-          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '…' : d.observations_generales;
-          page.drawText(`IA: ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
+          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '...' : d.observations_generales;
+          page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
         }
 
         // Photo thumbnail (right side)
@@ -812,7 +826,7 @@ export async function GET(request) {
       // SECTION: Locataire (styled box) - POLICE PLUS GROSSE
       page.drawRectangle({ x: 310, y: yPos - 80, width: 245, height: 90, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
       page.drawText('LOCATAIRE', { x: 320, y: yPos - 15, size: 12, font: fontBold, color: colorPrimary });
-      page.drawText(edl.nom_locataire || 'N/A', { x: 320, y: yPos - 35, size: 11, font });
+      page.drawText(pdfText(edl.nom_locataire || 'N/A'), { x: 320, y: yPos - 35, size: 11, font });
       
       yPos -= 110;
       
@@ -869,47 +883,47 @@ export async function GET(request) {
         const bgColor = i % 2 === 0 ? rgb(1, 1, 1) : colorBg;
         page.drawRectangle({ x: 40, y: yPos - blockH, width: 515, height: blockH, color: bgColor, borderColor: colorBorder, borderWidth: 0.5 });
 
-        page.drawText(piece.nom || 'N/A', { x: 50, y: yPos - 16, size: 12, font: fontBold, color: colorPrimary });
+        page.drawText(pdfText(piece.nom || 'N/A'), { x: 50, y: yPos - 16, size: 12, font: fontBold, color: colorPrimary });
         const etat = d.etat_general || 'Non renseigné';
-        page.drawText(`État général: ${etat}`, { x: 50, y: yPos - 32, size: 10, font });
+        page.drawText(pdfText(`Etat general: ${etat}`), { x: 50, y: yPos - 32, size: 10, font });
         page.drawLine({ start: { x: 50, y: yPos - 40 }, end: { x: 540, y: yPos - 40 }, thickness: 0.4, color: colorBorder });
 
         let yLine = yPos - 54;
 
-        if (murStr) page.drawText(`Murs: ${murStr}`, { x: 50, y: yLine, size: 9, font });
-        if (plafondStr) page.drawText(`Plafond: ${plafondStr}`, { x: 280, y: yLine, size: 9, font });
+        if (murStr) page.drawText(pdfText(`Murs: ${murStr}`), { x: 50, y: yLine, size: 9, font });
+        if (plafondStr) page.drawText(pdfText(`Plafond: ${plafondStr}`), { x: 280, y: yLine, size: 9, font });
         if (murStr || plafondStr) yLine -= 13;
         if (d.obs_murs) {
-          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '…' : d.obs_murs;
-          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          const obs = d.obs_murs.length > 90 ? d.obs_murs.substring(0, 90) + '...' : d.obs_murs;
+          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         if (solStr) {
-          page.drawText(`Sol: ${solStr}`, { x: 50, y: yLine, size: 9, font });
+          page.drawText(pdfText(`Sol: ${solStr}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_sol) {
-          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '…' : d.obs_sol;
-          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          const obs = d.obs_sol.length > 90 ? d.obs_sol.substring(0, 90) + '...' : d.obs_sol;
+          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         if (equips.length > 0) {
           const equipStr = equips.join(' | ');
-          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '…' : equipStr;
-          page.drawText(`Équip.: ${equipTrunc}`, { x: 50, y: yLine, size: 9, font });
+          const equipTrunc = equipStr.length > 100 ? equipStr.substring(0, 100) + '...' : equipStr;
+          page.drawText(pdfText(`Equip.: ${equipTrunc}`), { x: 50, y: yLine, size: 9, font });
           yLine -= 13;
         }
         if (d.obs_equipements) {
-          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '…' : d.obs_equipements;
-          page.drawText(`  → ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
+          const obs = d.obs_equipements.length > 90 ? d.obs_equipements.substring(0, 90) + '...' : d.obs_equipements;
+          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
           yLine -= 13;
         }
 
         if (d.observations_generales) {
-          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '…' : d.observations_generales;
-          page.drawText(`IA: ${obs}`, { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
+          const obs = d.observations_generales.length > 100 ? d.observations_generales.substring(0, 100) + '...' : d.observations_generales;
+          page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
         }
 
         // Photo thumbnail
