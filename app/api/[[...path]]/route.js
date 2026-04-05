@@ -1888,7 +1888,18 @@ export async function PUT(request) {
       if (!photo) return NextResponse.json({ error: 'Photo not found' }, { status: 404, headers: corsHeaders() });
       const edl = await db.collection('edl').findOne({ id: photo.edl_id });
       if (!edl || edl.user_id !== authUser.userId) return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
-      const { id, _id, ...updateData } = body;
+      const { id, _id, data, ...updateData } = body;
+      // Si data base64 fourni et pas encore d'URL Cloudinary, uploader
+      if (data && !photo.url) {
+        const cloudinaryData = await uploadToCloudinary(data, `edl-pro/${photo.edl_id}/${photo.piece_id}`);
+        if (cloudinaryData) {
+          updateData.url = cloudinaryData.url;
+          updateData.public_id = cloudinaryData.public_id;
+          updateData.data = null;
+        } else {
+          updateData.data = data;
+        }
+      }
       await db.collection('photos').updateOne({ id: segments[1] }, { $set: updateData });
       return NextResponse.json({ success: true }, { headers: corsHeaders() });
     }

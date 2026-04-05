@@ -2041,9 +2041,13 @@ function BatchUploader({ edlId, pieces, onComplete, showNotif }) {
           if (response.results[i].id && photosToAnalyze[i]) {
             // Update photo with full quality data and GPS
             try {
+              const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
               await fetch(`/api/photos/${response.results[i].id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token && { 'Authorization': `Bearer ${token}` }),
+                },
                 body: JSON.stringify({
                   data: photosToAnalyze[i].data,
                   gps: photosToAnalyze[i].gps,
