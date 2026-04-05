@@ -673,6 +673,9 @@ export async function GET(request) {
       page.drawText(edl.nom_proprietaire || 'N/A', { x: 330, y: yPos - 32, size: 12, font: fontBold });
       page.drawText('Lu et approuvé', { x: 330, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
       page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      if (edl.signature_proprietaire) {
+        page.drawText(edl.signature_proprietaire, { x: 335, y: yPos - 87, size: 14, font: fontItalic, color: rgb(0.1, 0.1, 0.5) });
+      }
       page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
       page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 330, y: yPos - 120, size: 9, font: fontBold });
 
@@ -977,6 +980,9 @@ export async function GET(request) {
       page.drawText(edl.nom_proprietaire || 'N/A', { x: 330, y: yPos - 32, size: 12, font: fontBold });
       page.drawText('Lu et approuvé', { x: 330, y: yPos - 50, size: 9, font: fontItalic, color: rgb(0.4, 0.4, 0.4) });
       page.drawText('Signature :', { x: 330, y: yPos - 68, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      if (edl.signature_proprietaire) {
+        page.drawText(edl.signature_proprietaire, { x: 335, y: yPos - 87, size: 14, font: fontItalic, color: rgb(0.1, 0.1, 0.5) });
+      }
       page.drawLine({ start: { x: 330, y: yPos - 100 }, end: { x: 535, y: yPos - 100 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
       page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 330, y: yPos - 120, size: 9, font: fontBold });
 

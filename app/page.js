@@ -1287,6 +1287,8 @@ function ReportView({ edl, pieces, showNotif }) {
   const [paying, setPaying] = useState(false);
   const [signName, setSignName] = useState('');
   const [signed, setSigned] = useState(false);
+  const [signNameProp, setSignNameProp] = useState('');
+  const [signedProp, setSignedProp] = useState(false);
   const [allPhotos, setAllPhotos] = useState({});
   const [loadingPhotos, setLoadingPhotos] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState('one_shot');
@@ -1419,12 +1421,12 @@ function ReportView({ edl, pieces, showNotif }) {
         return;
       }
 
-      // Save signature to edl before generating PDF
-      if (signed && signName.trim()) {
-        await api('edl/' + edl.id, {
-          method: 'PUT',
-          body: JSON.stringify({ signature_locataire: signName.trim() }),
-        });
+      // Save signatures to edl before generating PDF
+      const sigData = {};
+      if (signed && signName.trim()) sigData.signature_locataire = signName.trim();
+      if (signedProp && signNameProp.trim()) sigData.signature_proprietaire = signNameProp.trim();
+      if (Object.keys(sigData).length > 0) {
+        await api('edl/' + edl.id, { method: 'PUT', body: JSON.stringify(sigData) });
       }
 
       // Use the NEW server-side PDF generation endpoint
@@ -1749,19 +1751,37 @@ function ReportView({ edl, pieces, showNotif }) {
             </div>
           )}
 
-          {/* Signature */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-            <h3 className="font-bold text-[#1e3a5f] mb-3">✍️ Signature électronique</h3>
-            <div className="flex items-center gap-3 mb-3">
-              <input type="checkbox" checked={signed} onChange={e => setSigned(e.target.checked)}
-                className="w-5 h-5 rounded border-gray-300 text-[#2d6ac4]" />
-              <span className="text-sm text-gray-600">Je confirme l'exactitude des informations</span>
+          {/* Signatures */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
+            <h3 className="font-bold text-[#1e3a5f] mb-1">✍️ Signatures électroniques</h3>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Locataire</p>
+              <div className="flex items-center gap-3 mb-2">
+                <input type="checkbox" checked={signed} onChange={e => setSigned(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-300 text-[#2d6ac4]" />
+                <span className="text-sm text-gray-600">Lu et approuvé par le locataire</span>
+              </div>
+              {signed && (
+                <input type="text" value={signName} onChange={e => setSignName(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                  placeholder="Nom complet du locataire" />
+              )}
             </div>
-            {signed && (
-              <input type="text" value={signName} onChange={e => setSignName(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
-                placeholder="Votre nom complet" />
-            )}
+
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Propriétaire / Agence</p>
+              <div className="flex items-center gap-3 mb-2">
+                <input type="checkbox" checked={signedProp} onChange={e => setSignedProp(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-300 text-[#2d6ac4]" />
+                <span className="text-sm text-gray-600">Lu et approuvé par le propriétaire</span>
+              </div>
+              {signedProp && (
+                <input type="text" value={signNameProp} onChange={e => setSignNameProp(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none"
+                  placeholder="Nom complet du propriétaire / agence" />
+              )}
+            </div>
           </div>
 
           {/* Download & Share */}
