@@ -405,7 +405,8 @@ export async function GET(request) {
       let logoImage = null;
       try {
         const fs = (await import('fs')).default;
-        const logoPath = '/tmp/logo-edl-pro.png';
+        const path = (await import('path')).default;
+        const logoPath = path.join(process.cwd(), 'public', 'logo-edl-pro.png');
         const logoBytes = fs.readFileSync(logoPath);
         logoImage = await pdfDoc.embedPng(logoBytes);
       } catch (err) {
@@ -673,10 +674,11 @@ export async function GET(request) {
       const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
       
       // Load logo AFTER creating pdfDoc
-      const logoPath = '/tmp/logo-edl-pro.png';
       let logoImage = null;
       try {
-        const fs = require('fs');
+        const fs = (await import('fs')).default;
+        const path = (await import('path')).default;
+        const logoPath = path.join(process.cwd(), 'public', 'logo-edl-pro.png');
         const logoBytes = fs.readFileSync(logoPath);
         logoImage = await pdfDoc.embedPng(logoBytes);
         console.log('✅ Logo loaded successfully');

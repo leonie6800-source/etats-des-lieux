@@ -1445,11 +1445,11 @@ function ReportView({ edl, pieces, showNotif }) {
 
       emailjs.init(process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || '');
       const templateParams = {
-        to_email: emailTo,
-        from_name: 'État des Lieux Pro',
-        subject: `Rapport d'état des lieux - ${edl?.adresse || 'Rapport'}`,
+        email: emailTo,
+        nom: edl?.nom_locataire || 'Destinataire',
+        adresse_du_bien: edl?.adresse || '',
         message: [
-          `Bonjour,`,
+          `Bonjour ${edl?.nom_locataire || ''},`,
           ``,
           `Votre rapport d'état des lieux est prêt.`,
           ``,
@@ -1458,8 +1458,6 @@ function ReportView({ edl, pieces, showNotif }) {
           `Locataire : ${edl?.nom_locataire || ''}`,
           `Propriétaire : ${edl?.nom_proprietaire || ''}`,
           `Date : ${new Date().toLocaleDateString('fr-FR')}`,
-          `Pièces inspectées : ${completedPieces.length}`,
-          `Photos : ${totalPhotos}`,
           ``,
           `Téléchargez votre rapport PDF ici :`,
           downloadLink,
@@ -1467,9 +1465,6 @@ function ReportView({ edl, pieces, showNotif }) {
           `Cordialement,`,
           `État des Lieux Pro`,
         ].join('\n'),
-        to_name: edl?.nom_locataire || 'Destinataire',
-        reply_to: emailTo,
-        download_link: downloadLink,
       };
       
       console.log('📧 Sending email to:', emailTo);
