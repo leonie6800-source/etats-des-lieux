@@ -2004,6 +2004,18 @@ export async function POST(request) {
       }
     }
 
+    // POST /api/admin/reset-all - Delete all EDLs (admin only, temporary)
+    if (segments[0] === 'admin' && segments[1] === 'reset-all') {
+      const { admin_key } = body;
+      if (!admin_key || admin_key !== process.env.ADMIN_KEY) {
+        return NextResponse.json({ error: 'Clé admin invalide' }, { status: 403, headers: corsHeaders() });
+      }
+      const r1 = await db.collection('edl').deleteMany({});
+      const r2 = await db.collection('pieces').deleteMany({});
+      const r3 = await db.collection('photos').deleteMany({});
+      return NextResponse.json({ success: true, deleted: { edl: r1.deletedCount, pieces: r2.deletedCount, photos: r3.deletedCount } }, { headers: corsHeaders() });
+    }
+
     // POST /api/stripe/portal - Create Stripe Customer Portal Session
     if (segments[0] === 'stripe' && segments[1] === 'portal') {
       const { customer_id, return_url } = body;
