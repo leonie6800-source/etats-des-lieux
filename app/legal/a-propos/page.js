@@ -29,10 +29,10 @@ export default function APropos() {
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-[#2d6ac4] mb-3">Qui sommes-nous ?</h2>
           <p className="text-gray-700 leading-relaxed">
-            État des Lieux Pro est édité par un micro-entrepreneur basé à Fellerings, Alsace.
+            État des Lieux Pro est édité par Bouillet Aurélie (nom commercial : LilyFBA), micro-entreprise basée à Fellerings, Alsace.
           </p>
           <p className="text-gray-700 mt-2">
-            SIRET : À compléter
+            SIRET : 493 875 223 00072
           </p>
         </section>
 
