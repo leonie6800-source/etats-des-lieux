@@ -11,7 +11,7 @@ export default function MentionsLegales() {
             <strong>Forme juridique :</strong> Entreprise Individuelle (micro-entreprise)<br/>
             <strong>Siège social :</strong> 10 rue de l'église, 68470 Fellering<br/>
             <strong>SIRET :</strong> 493 875 223 00072<br/>
-            <strong>Email :</strong> Lilyfab25@gmail.com<br/>
+            <strong>Email :</strong> <a href="mailto:contact@edlpro.app" className="text-[#2d6ac4] hover:underline">contact@edlpro.app</a><br/>
             <strong>Téléphone :</strong> [Votre numéro de téléphone]
           </p>
         </section>
@@ -20,7 +20,7 @@ export default function MentionsLegales() {
           <h2 className="text-xl font-semibold text-[#2d6ac4] mb-3">2. Directeur de publication</h2>
           <p className="text-gray-700 leading-relaxed">
             <strong>Nom :</strong> Aurélie Bouillet<br/>
-            <strong>Email :</strong> Lilyfab25@gmail.com
+            <strong>Email :</strong> <a href="mailto:contact@edlpro.app" className="text-[#2d6ac4] hover:underline">contact@edlpro.app</a>
           </p>
         </section>
 
@@ -28,9 +28,9 @@ export default function MentionsLegales() {
           <h2 className="text-xl font-semibold text-[#2d6ac4] mb-3">3. Hébergement</h2>
           <p className="text-gray-700 leading-relaxed">
             Le site est hébergé par :<br/>
-            <strong>Emergent AI</strong><br/>
-            [ADRESSE HÉBERGEUR]<br/>
-            <strong>Site web :</strong> <a href="https://emergentmethods.ai" className="text-blue-600 hover:underline">https://emergentmethods.ai</a>
+            <strong>Vercel Inc.</strong><br/>
+            440 N Barranca Ave #4133, Covina, CA 91723, États-Unis<br/>
+            <strong>Site web :</strong> <a href="https://vercel.com" className="text-blue-600 hover:underline">https://vercel.com</a>
           </p>
         </section>
 
@@ -65,8 +65,10 @@ export default function MentionsLegales() {
           </p>
         </section>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <a href="/" className="text-[#2d6ac4] hover:underline font-medium">← Retour à l'accueil</a>
+        <div className="mt-8 pt-6 border-t border-gray-200 flex flex-wrap gap-4">
+          <a href="/" className="text-[#2d6ac4] hover:underline font-medium text-sm">← Retour à l'accueil</a>
+          <a href="/legal/contact" className="text-[#2d6ac4] hover:underline font-medium text-sm">Nous contacter</a>
+          <a href="/legal/a-propos" className="text-[#2d6ac4] hover:underline font-medium text-sm">À propos</a>
         </div>
       </div>
     </div>

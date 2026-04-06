@@ -1183,6 +1183,23 @@ export async function POST(request) {
     // For all other routes, parse JSON body
     const body = await request.json();
 
+    // POST /api/contact - Contact form
+    if (segments[0] === 'contact' && !segments[1]) {
+      const { nom, email, message } = body;
+      if (!nom || !email || !message) {
+        return NextResponse.json({ error: 'Champs manquants' }, { status: 400, headers: corsHeaders() });
+      }
+      const resend = new (await import('resend')).Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: 'État des Lieux Pro <noreply@edlpro.app>',
+        to: 'contact@edlpro.app',
+        subject: `Nouveau message - ${nom}`,
+        html: `<p><strong>Nom :</strong> ${nom}</p><p><strong>Email :</strong> ${email}</p><p><strong>Message :</strong></p><p>${message.replace(/\n/g,'<br>')}</p>`,
+        reply_to: email,
+      });
+      return NextResponse.json({ success: true }, { headers: corsHeaders() });
+    }
+
     // ============ AUTH ROUTES ============
     
     // POST /api/auth/register

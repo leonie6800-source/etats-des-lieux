@@ -11,7 +11,7 @@ export default function PolitiqueConfidentialite() {
           <p className="text-gray-700 leading-relaxed">
             <strong>Raison sociale :</strong> Bouillet Aurélie<br/>
             <strong>Adresse :</strong> 10 rue de l'église, 68470 Fellering<br/>
-            <strong>Email :</strong> Lilyfab25@gmail.com<br/>
+            <strong>Email :</strong> <a href="mailto:contact@edlpro.app" className="text-[#2d6ac4] hover:underline">contact@edlpro.app</a><br/>
             <strong>Téléphone :</strong> [Votre numéro de téléphone]
           </p>
         </section>
@@ -65,7 +65,7 @@ export default function PolitiqueConfidentialite() {
             <li><strong>Cloudinary</strong> : Stockage sécurisé des photos</li>
             <li><strong>EmailJS</strong> : Envoi des emails transactionnels</li>
             <li><strong>OpenAI</strong> : Analyse IA des photos (si option activée)</li>
-            <li><strong>Emergent AI</strong> : Hébergement du service</li>
+            <li><strong>Vercel</strong> : Hébergement du service (vercel.com)</li>
           </ul>
           <p className="text-gray-700 leading-relaxed mt-3">
             Ces prestataires sont tenus de respecter la confidentialité et la sécurité de vos données.
@@ -97,7 +97,7 @@ export default function PolitiqueConfidentialite() {
             <li><strong>Droit de limitation</strong> : Limiter le traitement de vos données</li>
           </ul>
           <p className="text-gray-700 leading-relaxed mt-3">
-            Pour exercer vos droits, contactez-nous à : <a href="mailto:Lilyfab25@gmail.com" className="text-blue-600 hover:underline">Lilyfab25@gmail.com</a>
+            Pour exercer vos droits, contactez-nous à : <a href="mailto:contact@edlpro.app" className="text-[#2d6ac4] hover:underline">contact@edlpro.app</a> ou via notre <a href="/legal/contact" className="text-[#2d6ac4] hover:underline">formulaire de contact</a>.
           </p>
         </section>
 
@@ -144,8 +144,10 @@ export default function PolitiqueConfidentialite() {
           </p>
         </section>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <a href="/" className="text-[#2d6ac4] hover:underline font-medium">← Retour à l'accueil</a>
+        <div className="mt-8 pt-6 border-t border-gray-200 flex flex-wrap gap-4">
+          <a href="/" className="text-[#2d6ac4] hover:underline font-medium text-sm">← Retour à l'accueil</a>
+          <a href="/legal/contact" className="text-[#2d6ac4] hover:underline font-medium text-sm">Nous contacter</a>
+          <a href="/legal/a-propos" className="text-[#2d6ac4] hover:underline font-medium text-sm">À propos</a>
         </div>
       </div>
     </div>
