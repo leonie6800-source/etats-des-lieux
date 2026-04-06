@@ -117,6 +117,7 @@ export default function App() {
   const [newEdl, setNewEdl] = useState({
     adresse: '', code_postal: '', ville: '', type_logement: 'T2', type_edl: 'Entrée',
     nom_locataire: '', nom_proprietaire: '', email_locataire: '',
+    heure_debut: '', heure_fin: '',
   });
 
   const showNotif = useCallback((msg, type = 'success') => {
@@ -368,7 +369,7 @@ export default function App() {
     try {
       const edl = await api('edl', { method: 'POST', body: JSON.stringify(newEdl) });
       showNotif('État des lieux créé !');
-      setNewEdl({ adresse: '', code_postal: '', ville: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '' });
+      setNewEdl({ adresse: '', code_postal: '', ville: '', type_logement: 'T2', type_edl: 'Entrée', nom_locataire: '', nom_proprietaire: '', email_locataire: '', heure_debut: '', heure_fin: '' });
       setShowCreateForm(false);
       // FORCE REFRESH - Refetch all EDLs
       const updatedEdls = await api('edl');
@@ -384,12 +385,22 @@ export default function App() {
     const merged = { ...formData, ...data };
     setFormData(merged);
     try {
-      const newStatut = nextStep > 5 ? 'completed' : 'in_progress';
+      const newStatut = nextStep > 6 ? 'completed' : 'in_progress';
       await api(`pieces/${currentPiece.id}`, {
         method: 'PUT',
         body: JSON.stringify({ donnees_json: merged, statut: newStatut, observations_generales: merged.observations_generales || '' }),
       });
-      if (nextStep > 5) {
+      // Save compteurs + clés to EDL if present
+      if (nextStep > 6 && currentEdl) {
+        const edlFields = {};
+        ['compteur_electricite','compteur_gaz','compteur_eau','cles_logement','cles_boite_aux_lettres','telecommandes','badges_acces','autres_acces'].forEach(k => {
+          if (merged[k] !== undefined && merged[k] !== '') edlFields[k] = merged[k];
+        });
+        if (Object.keys(edlFields).length > 0) {
+          await api(`edl/${currentEdl.id}`, { method: 'PUT', body: JSON.stringify(edlFields) });
+        }
+      }
+      if (nextStep > 6) {
         showNotif('Pièce terminée !');
         // FORCE REFRESH - Refetch everything with cache busters
         if (currentEdl) {
@@ -693,6 +704,19 @@ function DashboardView({ edls, showCreate, setShowCreate, newEdl, setNewEdl, cre
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none bg-white">
                   {EDL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Heure de début</label>
+                <input type="time" value={newEdl.heure_debut} onChange={e => setNewEdl({...newEdl, heure_debut: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Heure de fin</label>
+                <input type="time" value={newEdl.heure_fin} onChange={e => setNewEdl({...newEdl, heure_fin: e.target.value})}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#2d6ac4] outline-none" />
               </div>
             </div>
 
@@ -1239,7 +1263,56 @@ function InspectionView({ piece, step, setStep, formData, saveInspection, photos
             </div>
           )}
 
-          <StepButtons step={step} onPrev={() => setStep(4)} onNext={() => saveInspection(localData, 6)} nextLabel="✓ Terminer la pièce" />
+          <StepButtons step={step} onPrev={() => setStep(4)} onNext={() => setStep(6)} nextLabel="Suivant →" />
+        </div>
+      )}
+
+      {/* Step 6: Compteurs & Clés */}
+      {step === 6 && (
+        <div className="space-y-5">
+          <h2 className="text-lg font-bold text-[#1e3a5f]">Relevés & Clés</h2>
+
+          {/* Compteurs */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-100 space-y-3">
+            <h3 className="font-semibold text-[#1e3a5f] text-sm">⚡ Relevés de compteurs</h3>
+            {[
+              { key: 'compteur_electricite', label: 'Électricité (kWh)' },
+              { key: 'compteur_gaz', label: 'Gaz (m³)' },
+              { key: 'compteur_eau', label: 'Eau froide (m³)' },
+            ].map(({ key, label }) => (
+              <div key={key} className="flex items-center justify-between">
+                <label className="text-sm text-gray-700">{label}</label>
+                <input type="number" min="0" value={localData[key] || ''} onChange={e => update(key, e.target.value)}
+                  className="w-28 border border-gray-200 rounded-xl px-3 py-2 text-sm text-right outline-none focus:ring-2 focus:ring-[#2d6ac4]"
+                  placeholder="—" />
+              </div>
+            ))}
+          </div>
+
+          {/* Clés */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-100 space-y-3">
+            <h3 className="font-semibold text-[#1e3a5f] text-sm">🔑 Clés et accès remis</h3>
+            {[
+              { key: 'cles_logement', label: 'Clés du logement' },
+              { key: 'cles_boite_aux_lettres', label: 'Clés boîte aux lettres' },
+              { key: 'telecommandes', label: 'Télécommandes' },
+              { key: 'badges_acces', label: 'Badges d\'accès immeuble' },
+            ].map(({ key, label }) => (
+              <div key={key} className="flex items-center justify-between">
+                <label className="text-sm text-gray-700">{label}</label>
+                <input type="number" min="0" value={localData[key] ?? 0} onChange={e => update(key, parseInt(e.target.value) || 0)}
+                  className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
+              </div>
+            ))}
+            <div>
+              <label className="text-sm text-gray-700 mb-1 block">Autres accès (préciser)</label>
+              <input type="text" value={localData.autres_acces || ''} onChange={e => update('autres_acces', e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]"
+                placeholder="Ex: digicode, clé de cave..." />
+            </div>
+          </div>
+
+          <StepButtons step={step} onPrev={() => setStep(5)} onNext={() => saveInspection(localData, 7)} nextLabel="✓ Terminer la pièce" />
         </div>
       )}
     </div>
@@ -1273,7 +1346,7 @@ function StepButtons({ step, onPrev, onNext, nextLabel }) {
         </button>
       )}
       <button onClick={onNext}
-        className={`flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all ${step === 5 ? 'bg-[#27a96c] hover:bg-[#1f9058]' : 'bg-[#2d6ac4] hover:bg-[#2560b5]'}`}>
+        className={`flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all ${step === 6 ? 'bg-[#27a96c] hover:bg-[#1f9058]' : 'bg-[#2d6ac4] hover:bg-[#2560b5]'}`}>
         {nextLabel || 'Suivant →'}
       </button>
     </div>
@@ -1527,7 +1600,7 @@ function ReportView({ edl, pieces, showNotif, onEdlUpdate }) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-[#1e3a5f]">📋 Récapitulatif</h2>
           <div className="flex gap-2">
-            <button onClick={() => { setEditEdlData({ adresse: edl.adresse || '', code_postal: edl.code_postal || '', ville: edl.ville || '', nom_locataire: edl.nom_locataire || '', nom_proprietaire: edl.nom_proprietaire || '', email_locataire: edl.email_locataire || '' }); setShowEditEdl(true); }}
+            <button onClick={() => { setEditEdlData({ adresse: edl.adresse || '', code_postal: edl.code_postal || '', ville: edl.ville || '', heure_debut: edl.heure_debut || '', heure_fin: edl.heure_fin || '', nom_locataire: edl.nom_locataire || '', nom_proprietaire: edl.nom_proprietaire || '', email_locataire: edl.email_locataire || '' }); setShowEditEdl(true); }}
               className="text-xs text-gray-600 font-medium border border-gray-300 px-3 py-1 rounded-full hover:bg-gray-50">✏️ Modifier</button>
             <button onClick={() => setShowInvoices(true)} className="text-xs text-[#2d6ac4] font-medium border border-[#2d6ac4] px-3 py-1 rounded-full">🧾 Factures</button>
           </div>
@@ -1553,6 +1626,18 @@ function ReportView({ edl, pieces, showNotif, onEdlUpdate }) {
                   <label className="text-sm font-medium text-gray-700 mb-1 block">Ville</label>
                   <input type="text" value={editEdlData.ville} onChange={e => setEditEdlData({...editEdlData, ville: e.target.value})}
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" placeholder="Paris" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Heure début</label>
+                  <input type="time" value={editEdlData.heure_debut} onChange={e => setEditEdlData({...editEdlData, heure_debut: e.target.value})}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Heure fin</label>
+                  <input type="time" value={editEdlData.heure_fin} onChange={e => setEditEdlData({...editEdlData, heure_fin: e.target.value})}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#2d6ac4]" />
                 </div>
               </div>
               <div>

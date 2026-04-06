@@ -474,8 +474,10 @@ export async function GET(request) {
       // Colonne 1 : Numéro et Date
       page.drawText('RÉFÉRENCE', { x: 50, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
       page.drawText(reportId, { x: 50, y: yPos - 35, size: 13, font: fontBold });
-      page.drawText('Date', { x: 50, y: yPos - 55, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(new Date(edl.created_at).toLocaleDateString('fr-FR'), { x: 50, y: yPos - 70, size: 11, font });
+      page.drawText('Date et heure', { x: 50, y: yPos - 55, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      const dateStr = new Date(edl.created_at).toLocaleDateString('fr-FR');
+      const heureStr = (edl.heure_debut && edl.heure_fin) ? ` de ${edl.heure_debut} a ${edl.heure_fin}` : (edl.heure_debut ? ` a ${edl.heure_debut}` : '');
+      page.drawText(pdfText(`Le ${dateStr}${heureStr}`), { x: 50, y: yPos - 70, size: 9, font });
       
       // Colonne 2 : Adresse
       page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
@@ -663,13 +665,40 @@ export async function GET(request) {
         yPos -= blockH + 5;
       }
 
-      // LAST PAGE: SIGNATURES
+      // LAST PAGE: COMPTEURS + CLÉS + SIGNATURES
       page = pdfDoc.addPage([595, 842]);
       if (logoImage) {
         page.drawImage(logoImage, { x: (595 - 700) / 2, y: (842 - 700) / 2, width: 700, height: 700, opacity: 0.06 });
       }
-      yPos = 750;
+      yPos = 800;
 
+      // Section Compteurs
+      const hasCompteurs = edl.compteur_electricite || edl.compteur_gaz || edl.compteur_eau;
+      if (hasCompteurs) {
+        page.drawRectangle({ x: 40, y: yPos - 90, width: 515, height: 100, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+        page.drawText('RELEVES DE COMPTEURS', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+        let cy = yPos - 35;
+        if (edl.compteur_electricite) { page.drawText(`Electricite : ${edl.compteur_electricite} kWh`, { x: 60, y: cy, size: 10, font }); cy -= 16; }
+        if (edl.compteur_gaz) { page.drawText(`Gaz : ${edl.compteur_gaz} m3`, { x: 60, y: cy, size: 10, font }); cy -= 16; }
+        if (edl.compteur_eau) { page.drawText(`Eau froide : ${edl.compteur_eau} m3`, { x: 60, y: cy, size: 10, font }); cy -= 16; }
+        yPos -= 110;
+      }
+
+      // Section Clés
+      const hasCles = (edl.cles_logement > 0) || (edl.cles_boite_aux_lettres > 0) || (edl.telecommandes > 0) || (edl.badges_acces > 0) || edl.autres_acces;
+      if (hasCles) {
+        page.drawRectangle({ x: 40, y: yPos - 110, width: 515, height: 120, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+        page.drawText('CLES ET ACCES REMIS', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+        let ky = yPos - 35;
+        if (edl.cles_logement) { page.drawText(`Cles du logement : ${edl.cles_logement} exemplaire(s)`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.cles_boite_aux_lettres) { page.drawText(`Cles boite aux lettres : ${edl.cles_boite_aux_lettres} exemplaire(s)`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.telecommandes) { page.drawText(`Telecommandes : ${edl.telecommandes}`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.badges_acces) { page.drawText(`Badges d'acces : ${edl.badges_acces}`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.autres_acces) { page.drawText(pdfText(`Autres : ${edl.autres_acces}`), { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        yPos -= 130;
+      }
+
+      yPos -= 20;
       page.drawText('SIGNATURES', { x: 50, y: yPos, size: 18, font: fontBold, color: colorPrimary });
       page.drawLine({ start: { x: 50, y: yPos - 8 }, end: { x: 540, y: yPos - 8 }, thickness: 1, color: colorBorder });
       yPos -= 40;
@@ -699,7 +728,7 @@ export async function GET(request) {
       page.drawText(`Date : ${new Date(edl.created_at).toLocaleDateString('fr-FR')}`, { x: 330, y: yPos - 120, size: 9, font: fontBold });
 
       // Footer
-      page.drawText(`Généré certifié par État des Lieux Pro. Horodatage et intégrité des données garantis.`, {
+      page.drawText(`Conforme aux exigences de la loi ALUR 2014 | edlpro.app | contact@edlpro.app`, {
         x: 50,
         y: 50,
         size: 8,
@@ -801,8 +830,10 @@ export async function GET(request) {
       // Colonne 1 : Numéro et Date
       page.drawText('RÉFÉRENCE', { x: 50, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
       page.drawText(reportId, { x: 50, y: yPos - 35, size: 13, font: fontBold });
-      page.drawText('Date', { x: 50, y: yPos - 55, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
-      page.drawText(new Date(edl.created_at).toLocaleDateString('fr-FR'), { x: 50, y: yPos - 70, size: 11, font });
+      page.drawText('Date et heure', { x: 50, y: yPos - 55, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+      const dateStr = new Date(edl.created_at).toLocaleDateString('fr-FR');
+      const heureStr = (edl.heure_debut && edl.heure_fin) ? ` de ${edl.heure_debut} a ${edl.heure_fin}` : (edl.heure_debut ? ` a ${edl.heure_debut}` : '');
+      page.drawText(pdfText(`Le ${dateStr}${heureStr}`), { x: 50, y: yPos - 70, size: 9, font });
       
       // Colonne 2 : Adresse
       page.drawText('ADRESSE DU BIEN', { x: 250, y: yPos - 15, size: 10, font: fontBold, color: colorPrimary });
@@ -976,13 +1007,40 @@ export async function GET(request) {
         yPos -= blockH + 5;
       }
 
-      // LAST PAGE: SIGNATURES
+      // LAST PAGE: COMPTEURS + CLÉS + SIGNATURES
       page = pdfDoc.addPage([595, 842]);
       if (logoImage) {
         page.drawImage(logoImage, { x: (595 - 700) / 2, y: (842 - 700) / 2, width: 700, height: 700, opacity: 0.06 });
       }
-      yPos = 750;
+      yPos = 800;
 
+      // Section Compteurs
+      const hasCompteurs = edl.compteur_electricite || edl.compteur_gaz || edl.compteur_eau;
+      if (hasCompteurs) {
+        page.drawRectangle({ x: 40, y: yPos - 90, width: 515, height: 100, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+        page.drawText('RELEVES DE COMPTEURS', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+        let cy = yPos - 35;
+        if (edl.compteur_electricite) { page.drawText(`Electricite : ${edl.compteur_electricite} kWh`, { x: 60, y: cy, size: 10, font }); cy -= 16; }
+        if (edl.compteur_gaz) { page.drawText(`Gaz : ${edl.compteur_gaz} m3`, { x: 60, y: cy, size: 10, font }); cy -= 16; }
+        if (edl.compteur_eau) { page.drawText(`Eau froide : ${edl.compteur_eau} m3`, { x: 60, y: cy, size: 10, font }); cy -= 16; }
+        yPos -= 110;
+      }
+
+      // Section Clés
+      const hasCles = (edl.cles_logement > 0) || (edl.cles_boite_aux_lettres > 0) || (edl.telecommandes > 0) || (edl.badges_acces > 0) || edl.autres_acces;
+      if (hasCles) {
+        page.drawRectangle({ x: 40, y: yPos - 110, width: 515, height: 120, color: colorBg, borderColor: colorBorder, borderWidth: 1 });
+        page.drawText('CLES ET ACCES REMIS', { x: 50, y: yPos - 15, size: 11, font: fontBold, color: colorPrimary });
+        let ky = yPos - 35;
+        if (edl.cles_logement) { page.drawText(`Cles du logement : ${edl.cles_logement} exemplaire(s)`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.cles_boite_aux_lettres) { page.drawText(`Cles boite aux lettres : ${edl.cles_boite_aux_lettres} exemplaire(s)`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.telecommandes) { page.drawText(`Telecommandes : ${edl.telecommandes}`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.badges_acces) { page.drawText(`Badges d'acces : ${edl.badges_acces}`, { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        if (edl.autres_acces) { page.drawText(pdfText(`Autres : ${edl.autres_acces}`), { x: 60, y: ky, size: 10, font }); ky -= 16; }
+        yPos -= 130;
+      }
+
+      yPos -= 20;
       page.drawText('SIGNATURES', { x: 50, y: yPos, size: 18, font: fontBold, color: colorPrimary });
       page.drawLine({ start: { x: 50, y: yPos - 8 }, end: { x: 540, y: yPos - 8 }, thickness: 1, color: colorBorder });
       yPos -= 40;
@@ -1058,15 +1116,8 @@ export async function GET(request) {
         color: rgb(0.5, 0.5, 0.5) 
       });
       
-      // Footer (à gauche, pas sous le bloc)
-      page.drawText(`Généré certifié par État des Lieux Pro.`, {
-        x: 40,
-        y: 70,
-        size: 8,
-        font,
-        color: rgb(0.5, 0.5, 0.5)
-      });
-      page.drawText(`Horodatage et intégrité des données garantis.`, {
+      // Footer
+      page.drawText(`Conforme aux exigences de la loi ALUR 2014 | edlpro.app | contact@edlpro.app`, {
         x: 40,
         y: 55,
         size: 8,
@@ -1288,6 +1339,8 @@ export async function POST(request) {
         adresse: body.adresse || '',
         code_postal: body.code_postal || '',
         ville: body.ville || '',
+        heure_debut: body.heure_debut || '',
+        heure_fin: body.heure_fin || '',
         type_logement: body.type_logement || 'T2',
         type_edl: body.type_edl || 'Entrée',
         nom_locataire: body.nom_locataire || '',
