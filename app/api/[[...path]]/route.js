@@ -89,6 +89,7 @@ async function sendEmail(toEmail, edl, downloadToken) {
       html: emailHtml,
     });
 
+    if (result.error) throw new Error(result.error.message || 'Resend error');
     return true;
   } catch (error) {
     console.error('sendEmail Error:', error.message);
@@ -143,6 +144,27 @@ function generateToken(userId, email) {
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
+}
+
+// Split text into lines of maxChars (word-wrap)
+function wrapLines(text, maxChars) {
+  if (!text) return [];
+  const str = String(text);
+  if (str.length <= maxChars) return [str];
+  const words = str.split(' ');
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? current + ' ' + word : word;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+    } else {
+      if (current) lines.push(current);
+      current = word.length > maxChars ? word.substring(0, maxChars) : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [str.substring(0, maxChars)];
 }
 
 // Sanitize text for pdf-lib WinAnsi encoding (replaces unsupported Unicode chars)
@@ -540,15 +562,17 @@ export async function GET(request) {
         const murStr = [d.nature_murs, d.etat_murs].filter(Boolean).join(' - ');
         const plafondStr = [d.nature_plafond, d.etat_plafond].filter(Boolean).join(' - ');
         const solStr = [d.nature_sol, d.etat_sol].filter(Boolean).join(' - ');
-        let blockH = 55; // header: name + état général + separator
-        if (murStr || plafondStr) blockH += 14;
-        if (d.obs_murs) blockH += 13;
+        const T = 68;
+        let blockH = 55;
+        if (murStr) blockH += 14;
+        if (plafondStr) blockH += 14;
+        if (d.obs_murs) blockH += 13 * wrapLines(d.obs_murs, T - 4).length;
         if (solStr) blockH += 14;
-        if (d.obs_sol) blockH += 13;
-        if (equips.length > 0) { blockH += 14; if (equips.join(' | ').length > 68) blockH += 13; }
-        if (d.obs_equipements) blockH += 13;
-        if (d.observations_generales) blockH += 14;
-        blockH = Math.max(blockH, 90) + 20; // min 90px + bottom padding
+        if (d.obs_sol) blockH += 13 * wrapLines(d.obs_sol, T - 4).length;
+        if (equips.length > 0) { const eqLines = wrapLines(equips.join(' | '), T - 7); blockH += 13 * Math.max(eqLines.length, 1); }
+        if (d.obs_equipements) blockH += 13 * wrapLines(d.obs_equipements, T - 4).length;
+        if (d.observations_generales) blockH += 13 * wrapLines(d.observations_generales, T - 4).length;
+        blockH = Math.max(blockH, 90) + 20;
 
         if (yPos - blockH < 80) {
           page = pdfDoc.addPage([595, 842]);
@@ -571,49 +595,27 @@ export async function GET(request) {
 
         let yLine = yPos - 54;
 
-        const T = 68; // max chars per line (photo at x=415, text area ~370px at size 9)
-        // Murs then Plafond on separate lines
-        if (murStr) { page.drawText(pdfText(`Murs: ${murStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
-        if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
+        if (murStr) { page.drawText(pdfText(`Murs: ${murStr}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
+        if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_murs) {
-          const obs = d.obs_murs.length > T ? d.obs_murs.substring(0, T) + '...' : d.obs_murs;
-          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
-          yLine -= 13;
+          wrapLines(d.obs_murs, T - 4).forEach(l => { page.drawText(pdfText(`  > ${l}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) }); yLine -= 13; });
         }
-
-        // Sol
-        if (solStr) {
-          page.drawText(pdfText(`Sol: ${solStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font });
-          yLine -= 13;
-        }
+        if (solStr) { page.drawText(pdfText(`Sol: ${solStr}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_sol) {
-          const obs = d.obs_sol.length > T ? d.obs_sol.substring(0, T) + '...' : d.obs_sol;
-          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
-          yLine -= 13;
+          wrapLines(d.obs_sol, T - 4).forEach(l => { page.drawText(pdfText(`  > ${l}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) }); yLine -= 13; });
         }
-
-        // Equipements - split into lines of T chars
         if (equips.length > 0) {
-          const equipStr = equips.join(' | ');
-          const line1 = equipStr.substring(0, T);
-          const line2 = equipStr.length > T ? equipStr.substring(T, T * 2) : '';
-          page.drawText(pdfText(`Equip.: ${line1}`), { x: 50, y: yLine, size: 9, font });
-          yLine -= 13;
-          if (line2) {
-            page.drawText(pdfText(`  ${line2}${equipStr.length > T * 2 ? '...' : ''}`), { x: 50, y: yLine, size: 9, font });
-            yLine -= 13;
-          }
+          const eqLines = wrapLines(equips.join(' | '), T - 7);
+          page.drawText(pdfText(`Equip.: ${eqLines[0]}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13;
+          for (let li = 1; li < eqLines.length; li++) { page.drawText(pdfText(`  ${eqLines[li]}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         }
         if (d.obs_equipements) {
-          const obs = d.obs_equipements.length > T ? d.obs_equipements.substring(0, T) + '...' : d.obs_equipements;
-          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
-          yLine -= 13;
+          wrapLines(d.obs_equipements, T - 4).forEach(l => { page.drawText(pdfText(`  > ${l}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) }); yLine -= 13; });
         }
-
-        // Observations generales (IA)
         if (d.observations_generales) {
-          const obs = d.observations_generales.length > T ? d.observations_generales.substring(0, T) + '...' : d.observations_generales;
-          page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
+          const iaLines = wrapLines(d.observations_generales, T - 4);
+          page.drawText(pdfText(`IA: ${iaLines[0]}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) }); yLine -= 13;
+          for (let li = 1; li < iaLines.length; li++) { page.drawText(pdfText(`  ${iaLines[li]}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) }); yLine -= 13; }
         }
 
         // Photo thumbnail (right side, x=415)
@@ -891,15 +893,16 @@ export async function GET(request) {
         const murStr = [d.nature_murs, d.etat_murs].filter(Boolean).join(' - ');
         const plafondStr = [d.nature_plafond, d.etat_plafond].filter(Boolean).join(' - ');
         const solStr = [d.nature_sol, d.etat_sol].filter(Boolean).join(' - ');
+        const T = 68;
         let blockH = 55;
         if (murStr) blockH += 14;
-        if (plafondStr) blockH += 14; // now on separate line
-        if (d.obs_murs) blockH += 13;
+        if (plafondStr) blockH += 14;
+        if (d.obs_murs) blockH += 13 * wrapLines(d.obs_murs, T - 4).length;
         if (solStr) blockH += 14;
-        if (d.obs_sol) blockH += 13;
-        if (equips.length > 0) { blockH += 14; if (equips.join(' | ').length > 68) blockH += 13; }
-        if (d.obs_equipements) blockH += 13;
-        if (d.observations_generales) blockH += 14;
+        if (d.obs_sol) blockH += 13 * wrapLines(d.obs_sol, T - 4).length;
+        if (equips.length > 0) { const eqLines = wrapLines(equips.join(' | '), T - 7); blockH += 13 * Math.max(eqLines.length, 1); }
+        if (d.obs_equipements) blockH += 13 * wrapLines(d.obs_equipements, T - 4).length;
+        if (d.observations_generales) blockH += 13 * wrapLines(d.observations_generales, T - 4).length;
         blockH = Math.max(blockH, 90) + 20;
 
         if (yPos - blockH < 80) {
@@ -921,45 +924,27 @@ export async function GET(request) {
 
         let yLine = yPos - 54;
 
-        const T = 68;
-        if (murStr) { page.drawText(pdfText(`Murs: ${murStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
-        if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
+        if (murStr) { page.drawText(pdfText(`Murs: ${murStr}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
+        if (plafondStr) { page.drawText(pdfText(`Plafond: ${plafondStr}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_murs) {
-          const obs = d.obs_murs.length > T ? d.obs_murs.substring(0, T) + '...' : d.obs_murs;
-          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
-          yLine -= 13;
+          wrapLines(d.obs_murs, T - 4).forEach(l => { page.drawText(pdfText(`  > ${l}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) }); yLine -= 13; });
         }
-
-        if (solStr) {
-          page.drawText(pdfText(`Sol: ${solStr.substring(0,T)}`), { x: 50, y: yLine, size: 9, font });
-          yLine -= 13;
-        }
+        if (solStr) { page.drawText(pdfText(`Sol: ${solStr}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         if (d.obs_sol) {
-          const obs = d.obs_sol.length > T ? d.obs_sol.substring(0, T) + '...' : d.obs_sol;
-          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
-          yLine -= 13;
+          wrapLines(d.obs_sol, T - 4).forEach(l => { page.drawText(pdfText(`  > ${l}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) }); yLine -= 13; });
         }
-
         if (equips.length > 0) {
-          const equipStr = equips.join(' | ');
-          const line1 = equipStr.substring(0, T);
-          const line2 = equipStr.length > T ? equipStr.substring(T, T * 2) : '';
-          page.drawText(pdfText(`Equip.: ${line1}`), { x: 50, y: yLine, size: 9, font });
-          yLine -= 13;
-          if (line2) {
-            page.drawText(pdfText(`  ${line2}${equipStr.length > T * 2 ? '...' : ''}`), { x: 50, y: yLine, size: 9, font });
-            yLine -= 13;
-          }
+          const eqLines = wrapLines(equips.join(' | '), T - 7);
+          page.drawText(pdfText(`Equip.: ${eqLines[0]}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13;
+          for (let li = 1; li < eqLines.length; li++) { page.drawText(pdfText(`  ${eqLines[li]}`), { x: 50, y: yLine, size: 9, font }); yLine -= 13; }
         }
         if (d.obs_equipements) {
-          const obs = d.obs_equipements.length > T ? d.obs_equipements.substring(0, T) + '...' : d.obs_equipements;
-          page.drawText(pdfText(`  > ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) });
-          yLine -= 13;
+          wrapLines(d.obs_equipements, T - 4).forEach(l => { page.drawText(pdfText(`  > ${l}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.3, 0.3, 0.3) }); yLine -= 13; });
         }
-
         if (d.observations_generales) {
-          const obs = d.observations_generales.length > T ? d.observations_generales.substring(0, T) + '...' : d.observations_generales;
-          page.drawText(pdfText(`IA: ${obs}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) });
+          const iaLines = wrapLines(d.observations_generales, T - 4);
+          page.drawText(pdfText(`IA: ${iaLines[0]}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) }); yLine -= 13;
+          for (let li = 1; li < iaLines.length; li++) { page.drawText(pdfText(`  ${iaLines[li]}`), { x: 50, y: yLine, size: 8, font: fontItalic, color: rgb(0.2, 0.35, 0.6) }); yLine -= 13; }
         }
 
         // Photo thumbnail (right side x=415)
