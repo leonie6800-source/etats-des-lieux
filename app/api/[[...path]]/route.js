@@ -89,7 +89,6 @@ async function sendEmail(toEmail, edl, downloadToken) {
       html: emailHtml,
     });
 
-    console.log(`✅ Email sent successfully to: ${toEmail} (ID: ${result.data?.id})`);
     return true;
   } catch (error) {
     console.error('sendEmail Error:', error.message);
@@ -451,16 +450,14 @@ export async function GET(request) {
           height: watermarkSize,
           opacity: 0.08
         });
-        console.log('✅ Watermark added - FULL PAGE');
       }
-      
+
       // BANDEAU BLEU PLUS GROS en haut
       page.drawRectangle({ x: 0, y: 742, width: 595, height: 100, color: colorPrimary });
-      
+
       // LOGO TRÈS GROS dans le bandeau bleu (left)
       if (logoImage) {
         page.drawImage(logoImage, { x: 15, y: 747, width: 100, height: 100 });
-        console.log('✅ Logo added to header');
       }
       
       // Title in bandeau (center-right) - PLUS GROS
@@ -777,7 +774,6 @@ export async function GET(request) {
       try {
         const logoBytes = Buffer.from(LOGO_BASE64, 'base64');
         logoImage = await pdfDoc.embedPng(logoBytes);
-        console.log('✅ Logo loaded successfully');
       } catch (err) {
         console.error('❌ Logo error:', err);
       }
@@ -807,16 +803,14 @@ export async function GET(request) {
           height: watermarkSize,
           opacity: 0.08
         });
-        console.log('✅ Watermark added - FULL PAGE');
       }
-      
+
       // BANDEAU BLEU PLUS GROS en haut
       page.drawRectangle({ x: 0, y: 742, width: 595, height: 100, color: colorPrimary });
-      
+
       // LOGO TRÈS GROS dans le bandeau bleu (left)
       if (logoImage) {
         page.drawImage(logoImage, { x: 15, y: 747, width: 100, height: 100 });
-        console.log('✅ Logo added to header');
       }
       
       // Title in bandeau (center-right) - PLUS GROS
@@ -1166,7 +1160,6 @@ export async function POST(request) {
         const rawBody = await request.text();
         const event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret);
 
-        console.log(`🔔 Stripe Webhook: ${event.type}`);
 
         // Handle subscription cancellation
         if (event.type === 'customer.subscription.deleted') {
@@ -1183,7 +1176,6 @@ export async function POST(request) {
             }
           );
           
-          console.log(`✅ Subscription ${subscription.id} marked as canceled`);
         }
 
         // Handle checkout session completed (for one-time payments)
@@ -1220,7 +1212,6 @@ export async function POST(request) {
               await sendEmail(edl.email_locataire, edl, downloadToken);
             }
             
-            console.log(`✅ Checkout completed for EDL ${metadata.edl_id}, email sent`);
           }
         }
 
@@ -1835,14 +1826,12 @@ export async function POST(request) {
         const session = await getStripe().checkout.sessions.retrieve(session_id);
         const transaction = await db.collection('payment_transactions').findOne({ session_id });
 
-        console.log(`🔍 Stripe Session Check: status=${session.status}, payment_status=${session.payment_status}, amount=${session.amount_total}`);
 
         // Only process if not already processed (idempotent)
         // Note: For $0 payments with 100% coupon, payment_status might be 'no_payment_required' instead of 'paid'
         const isPaymentComplete = (session.status === 'complete') || (session.payment_status === 'paid') || (session.payment_status === 'no_payment_required');
         
         if (isPaymentComplete && transaction && transaction.payment_status !== 'paid') {
-          console.log(`✅ Processing payment for session ${session_id}`);
           const downloadToken = uuidv4().replace(/-/g, '').substring(0, 16);
           const metadata = session.metadata || {};
 
@@ -1888,10 +1877,8 @@ export async function POST(request) {
           const recipientEmail = session.customer_email || metadata.customer_email || edl?.email_locataire;
           
           if (recipientEmail) {
-            console.log(`📧 Attempting to send email to: ${recipientEmail}`);
             const emailSent = await sendEmail(recipientEmail, edl, downloadToken);
             if (emailSent) {
-              console.log(`✅ Email successfully sent to ${recipientEmail}`);
             } else {
               console.error(`❌ Failed to send email to ${recipientEmail}`);
             }
@@ -1933,12 +1920,10 @@ export async function POST(request) {
     if (segments[0] === 'email' && segments[1] === 'send') {
       if (!authUser) return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders() });
       const { to, edl_id, download_token } = body;
-      console.log('📧 email/send called - to:', to, 'edl_id:', edl_id, 'RESEND_KEY set:', !!process.env.RESEND_API_KEY);
       if (!to || !to.includes('@')) {
         return NextResponse.json({ error: 'Email invalide' }, { status: 400, headers: corsHeaders() });
       }
       const edl = await db.collection('edl').findOne({ id: edl_id });
-      console.log('📧 EDL found:', !!edl, 'user match:', edl?.user_id === authUser.userId);
       if (!edl || edl.user_id !== authUser.userId) {
         return NextResponse.json({ error: 'Accès refusé' }, { status: 403, headers: corsHeaders() });
       }
@@ -1954,7 +1939,6 @@ export async function POST(request) {
       const validPromoCodes = (process.env.PROMO_CODES || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
 
       const submittedCode = (promo_code || admin_key || '').toUpperCase();
-      console.log('🔑 promo debug - submitted:', JSON.stringify(submittedCode), 'valid codes:', JSON.stringify(validPromoCodes), 'admin key match:', submittedCode === (validAdminKey || '').toUpperCase());
       const isValid = (validAdminKey && submittedCode === validAdminKey.toUpperCase()) ||
                       (validPromoCodes.length > 0 && validPromoCodes.includes(submittedCode));
 
@@ -2002,18 +1986,6 @@ export async function POST(request) {
         console.error('Admin unlock error:', err);
         return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
       }
-    }
-
-    // POST /api/admin/reset-all - Delete all EDLs (admin only, temporary)
-    if (segments[0] === 'admin' && segments[1] === 'reset-all') {
-      const { admin_key } = body;
-      if (!admin_key || admin_key !== process.env.ADMIN_KEY) {
-        return NextResponse.json({ error: 'Clé admin invalide' }, { status: 403, headers: corsHeaders() });
-      }
-      const r1 = await db.collection('edl').deleteMany({});
-      const r2 = await db.collection('pieces').deleteMany({});
-      const r3 = await db.collection('photos').deleteMany({});
-      return NextResponse.json({ success: true, deleted: { edl: r1.deletedCount, pieces: r2.deletedCount, photos: r3.deletedCount } }, { headers: corsHeaders() });
     }
 
     // POST /api/stripe/portal - Create Stripe Customer Portal Session
