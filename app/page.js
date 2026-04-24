@@ -112,6 +112,8 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
   const [authLoading, setAuthLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
 
   // Form state for new EDL
   const [newEdl, setNewEdl] = useState({
@@ -275,7 +277,9 @@ export default function App() {
       setUserEmail(result.user.email);
       setShowEmailPrompt(false);
       fetchEdls();
-      
+      if (mode === 'register' && !localStorage.getItem('onboarding_done')) {
+        setShowOnboarding(true);
+      }
       showNotif(mode === 'register' ? 'Compte créé avec succès !' : 'Connexion réussie !');
     } catch (err) {
       showNotif(err.message, 'error');
@@ -494,6 +498,57 @@ export default function App() {
   // ==================== RENDER ====================
   return (
     <div className="min-h-screen bg-[#f4f6f9]">
+      {/* Onboarding Modal */}
+      {showOnboarding && (() => {
+        const steps = [
+          { icon: '👋', title: 'Bienvenue sur État des Lieux Pro !', desc: 'Créez des états des lieux professionnels conformes à la loi ALUR 2014 en quelques minutes.', detail: 'Cette application vous guide étape par étape pour documenter chaque pièce avec photos, observations et signatures électroniques.' },
+          { icon: '🏠', title: 'Étape 1 — Créer un EDL', desc: 'Cliquez sur "+ Nouveau" pour créer votre premier état des lieux.', detail: 'Renseignez l\'adresse, les heures de début/fin (obligatoires ALUR), les noms du locataire et propriétaire.' },
+          { icon: '📸', title: 'Étape 2 — Inspecter les pièces', desc: 'Pour chaque pièce : prenez des photos, l\'IA les analyse automatiquement.', detail: 'Complétez l\'état des murs, sol, plafond et équipements. L\'étape 6 permet de saisir compteurs et clés remises.' },
+          { icon: '✍️', title: 'Étape 3 — Signatures', desc: 'Faites signer locataire et propriétaire directement sur l\'écran.', detail: 'Les signatures sont horodatées et intégrées au PDF final.' },
+          { icon: '📄', title: 'Étape 4 — PDF & Email', desc: 'Générez le rapport PDF et envoyez-le automatiquement par email.', detail: 'Le PDF contient toutes les mentions obligatoires loi ALUR 2014.' },
+          { icon: '📚', title: 'Guide complet disponible', desc: 'Retrouvez le guide détaillé avec toutes les étapes à tout moment.', detail: 'Cliquez sur "Guide d\'utilisation" dans le footer, ou rendez-vous sur /guide.' },
+        ];
+        const s = steps[onboardingStep];
+        return (
+          <div className="fixed inset-0 bg-black/60 z-[9998] flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+              {/* Progress */}
+              <div className="flex">
+                {steps.map((_, i) => (
+                  <div key={i} className="flex-1 h-1" style={{ background: i <= onboardingStep ? '#2d6ac4' : '#e5e7eb' }} />
+                ))}
+              </div>
+              <div className="p-6">
+                <div className="text-center mb-4">
+                  <div className="text-5xl mb-3">{s.icon}</div>
+                  <h2 className="text-lg font-bold text-[#1e3a5f] mb-2">{s.title}</h2>
+                  <p className="text-sm text-gray-700 font-medium mb-2">{s.desc}</p>
+                  <p className="text-xs text-gray-500">{s.detail}</p>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => { localStorage.setItem('onboarding_done', '1'); setShowOnboarding(false); }}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-sm">
+                    Passer
+                  </button>
+                  {onboardingStep < steps.length - 1 ? (
+                    <button onClick={() => setOnboardingStep(onboardingStep + 1)}
+                      className="flex-1 py-2.5 rounded-xl bg-[#1e3a5f] text-white text-sm font-semibold">
+                      Suivant →
+                    </button>
+                  ) : (
+                    <button onClick={() => { localStorage.setItem('onboarding_done', '1'); setShowOnboarding(false); }}
+                      className="flex-1 py-2.5 rounded-xl bg-[#2d6ac4] text-white text-sm font-semibold">
+                      C'est parti ! 🚀
+                    </button>
+                  )}
+                </div>
+                <p className="text-center text-xs text-gray-400 mt-3">{onboardingStep + 1} / {steps.length}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Auth Modal (Login/Register) */}
       {showEmailPrompt && (
         <div className="fixed inset-0 bg-gradient-to-br from-[#1e3a5f] to-[#2d6ac4] z-[9999] flex items-center justify-center p-4 overflow-y-auto">
